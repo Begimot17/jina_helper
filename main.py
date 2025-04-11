@@ -3,6 +3,7 @@ import sys
 import threading
 
 import requests
+import yaml
 from dotenv import load_dotenv
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon, QTextCursor
@@ -50,9 +51,9 @@ class JinaMDProcessor(QMainWindow):
             sys.exit(1)
 
         # Default system prompt
-        self.default_system_prompt = """You are a professional data extractor. 
-Analyze the provided markdown content and extract all important fields in a structured way. 
-Include all relevant details like product name, specifications, features, price, etc."""
+        self.default_system_prompt = None
+        self.user_prompt_template = None
+        self.load_prompts()
 
         self.signal_emitter = SignalEmitter()
         self.signal_emitter.update_text_signal.connect(self.update_text)
@@ -60,6 +61,19 @@ Include all relevant details like product name, specifications, features, price,
         self.signal_emitter.enable_button_signal.connect(self.enable_button)
 
         self.init_ui()
+
+    def load_prompts(self):
+        """Загружает промпты из YAML файла"""
+        try:
+            with open("prompts.yaml", "r", encoding="utf-8") as f:
+                prompts = yaml.safe_load(f)
+                self.default_system_prompt = prompts.get("system_prompt", "")
+                self.user_prompt_template = prompts.get("user_prompt", "")
+        except Exception as e:
+            QMessageBox.warning(self, "Warning", f"Failed to load prompts: {str(e)}")
+            # Значения по умолчанию
+            self.default_system_prompt = "You are a helpful assistant."
+            self.user_prompt_template = "Please analyze this content:\n{content}"
 
     def get_icon_path(self):
         """Возвращает путь к иконке в зависимости от платформы"""
@@ -252,12 +266,12 @@ Include all relevant details like product name, specifications, features, price,
         client = Client()
         system_prompt = self.system_prompt_edit.toPlainText().strip()
 
+        # Форматируем пользовательский промпт с подстановкой контента
+        user_prompt = self.user_prompt_template.format(content=raw_md)
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"Please analyze and extract information from this markdown content:\n\n{raw_md}",
-            },
+            {"role": "user", "content": user_prompt},
         ]
 
         response = client.chat.completions.create(
