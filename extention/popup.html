@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Jina.ai MD Processor</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Jina.ai MD Processor</h1>
+
+    <div class="form-group">
+      <label for="url-input">Listing URL:</label>
+      <input type="text" id="url-input" class="form-control">
+      <button id="paste-btn" class="btn">Paste</button>
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="use-proxy">
+        Use Proxy
+      </label>
+      <input type="text" id="proxy-input" class="form-control" disabled>
+    </div>
+
+    <button id="process-btn" class="btn btn-primary">Process Listing</button>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="raw-tab">Original MD</button>
+      <button class="tab-btn" data-tab="processed-tab">Processed Content</button>
+    </div>
+
+    <div id="raw-tab" class="tab-content active">
+      <textarea id="raw-md" class="output-area" readonly></textarea>
+    </div>
+
+    <div id="processed-tab" class="tab-content">
+      <textarea id="processed-content" class="output-area" readonly></textarea>
+    </div>
+
+    <div id="status-bar"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
