@@ -35,13 +35,23 @@ class JinaMDProcessor(ctk.CTk):
     def load_prompts(self):
         try:
             with open("prompts.yaml", "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
+                prompts_list = yaml.safe_load(f)
+                if not isinstance(prompts_list, list):
+                    raise yaml.YAMLError(
+                        "The root of prompts.yaml should be a list of objects."
+                    )
+                # Convert list of dicts to a single dict for easier lookup
+                prompts_dict = {p['name']: p['text'] for p in prompts_list}
+                return prompts_dict
         except FileNotFoundError:
             messagebox.showerror("Error", "prompts.yaml not found!")
-            return [{"name": "Default", "text": "Please create a prompts.yaml file."}]
-        except yaml.YAMLError as e:
-            messagebox.showerror("YAML Error", f"Error parsing prompts.yaml: {e}")
-            return [{"name": "Error", "text": "Invalid YAML format."}]
+            return {"Default": "Please create a prompts.yaml file."}
+        except (yaml.YAMLError, TypeError, KeyError) as e:
+            messagebox.showerror(
+                "YAML Error",
+                f"Error parsing prompts.yaml. Check format: {e}\nIt should be a list of {{'name': ..., 'text': ...}}",
+            )
+            return {"Error": "Invalid YAML format."}
 
     def init_ui(self):
         self.grid_columnconfigure(0, weight=1)
@@ -110,7 +120,7 @@ class JinaMDProcessor(ctk.CTk):
         self.prompt_label = ctk.CTkLabel(self.prompt_selection_frame, text="Select Prompt:")
         self.prompt_label.grid(row=0, column=0, padx=10, pady=5)
 
-        prompt_names = [p["name"] for p in self.prompts]
+        prompt_names = list(self.prompts.keys())
         self.prompt_menu = ctk.CTkOptionMenu(
             self.prompt_selection_frame, values=prompt_names, command=self.on_prompt_select
         )
@@ -165,20 +175,28 @@ class JinaMDProcessor(ctk.CTk):
         self._enable_text_widget_bindings(self.processed_area)
 
         # Set default prompt
-        self.on_prompt_select(prompt_names[0])
+        if prompt_names:
+            self.on_prompt_select(prompt_names[0])
 
     def on_prompt_select(self, selected_prompt_name):
-        for prompt in self.prompts:
-            if prompt["name"] == selected_prompt_name:
-                self.system_prompt_edit.delete("1.0", "end")
-                self.system_prompt_edit.insert("1.0", prompt["text"])
-                break
+        prompt_text = self.prompts.get(selected_prompt_name, "")
+        self.system_prompt_edit.delete("1.0", "end")
+        self.system_prompt_edit.insert("1.0", prompt_text)
 
     def _enable_text_widget_bindings(self, widget):
-        widget.bind("<Control-c>", lambda e: widget.event_generate("<<Copy>>"))
-        widget.bind("<Control-v>", lambda e: widget.event_generate("<<Paste>>"))
-        widget.bind("<Control-x>", lambda e: widget.event_generate("<<Cut>>"))
-        widget.bind("<Control-a>", lambda e: widget.event_generate("<<SelectAll>>"))
+        def on_copy(event=None): widget.event_generate("<<Copy>>")
+        def on_paste(event=None): widget.event_generate("<<Paste>>")
+        def on_cut(event=None): widget.event_generate("<<Cut>>")
+        def on_select_all(event=None): widget.event_generate("<<SelectAll>>")
+
+        widget.bind("<Control-c>", on_copy)
+        widget.bind("<Control-C>", on_copy)
+        widget.bind("<Control-v>", on_paste)
+        widget.bind("<Control-V>", on_paste)
+        widget.bind("<Control-x>", on_cut)
+        widget.bind("<Control-X>", on_cut)
+        widget.bind("<Control-a>", on_select_all)
+        widget.bind("<Control-A>", on_select_all)
 
     def toggle_proxy_entry(self):
         state = "normal" if self.use_proxy_check.get() else "disabled"
@@ -316,3 +334,7 @@ class JinaMDProcessor(ctk.CTk):
 
     def update_status(self, message):
         self.status_bar.configure(text=message)
+
+if __name__ == "__main__":
+    app = JinaMDProcessor()
+    app.mainloop()
