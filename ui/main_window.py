@@ -22,8 +22,9 @@ class JinaMDProcessor(ctk.CTk):
         self.default_system_prompt = DEFAULT_SYSTEM_PROMPT
         self.user_prompt_template = USER_PROMPT_TEMPLATE
 
-        # Queue for thread-safe UI updates
         self.ui_queue = queue.Queue()
+        self.active_threads = 0
+        self.lock = threading.Lock()
 
         self.init_ui()
         self.check_queue()
@@ -44,9 +45,9 @@ class JinaMDProcessor(ctk.CTk):
         self.url_frame = ctk.CTkFrame(self)
         self.url_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
         self.url_frame.grid_columnconfigure(1, weight=1)
-        self.url_label = ctk.CTkLabel(self.url_frame, text="Listing URL:")
+        self.url_label = ctk.CTkLabel(self.url_frame, text="Listing URLs (one per line):")
         self.url_label.grid(row=0, column=0, padx=10, pady=5)
-        self.url_entry = ctk.CTkEntry(self.url_frame)
+        self.url_entry = ctk.CTkTextbox(self.url_frame, height=100)
         self.url_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
         # Options
@@ -83,7 +84,7 @@ class JinaMDProcessor(ctk.CTk):
 
         # Prompts Tab
         self.tab_view.tab("Prompts & Controls").grid_columnconfigure(0, weight=1)
-        self.tab_view.tab("Prompts & Controls").grid_rowconfigure(0, weight=1)
+        self.tab_view.tab("Prompts & Controls").grid_rowconfigure(1, weight=1)
 
         self.system_prompt_label = ctk.CTkLabel(
             self.tab_view.tab("Prompts & Controls"), text="System Prompt:"
@@ -109,8 +110,8 @@ class JinaMDProcessor(ctk.CTk):
 
         self.process_btn = ctk.CTkButton(
             self.controls_frame,
-            text="Process Listing",
-            command=self.start_fetch_thread,
+            text="Process Listings",
+            command=self.start_fetch_threads,
             font=ctk.CTkFont(weight="bold"),
         )
         self.process_btn.pack(side="right", padx=10, pady=5)
@@ -135,6 +136,20 @@ class JinaMDProcessor(ctk.CTk):
         self.status_bar = ctk.CTkLabel(self, text="Ready", anchor="w")
         self.status_bar.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
 
+        # Enable standard text editing shortcuts
+        self._enable_text_widget_bindings(self.url_entry)
+        self._enable_text_widget_bindings(self.proxy_entry)
+        self._enable_text_widget_bindings(self.system_prompt_edit)
+        self._enable_text_widget_bindings(self.raw_md_area)
+        self._enable_text_widget_bindings(self.processed_area)
+
+    def _enable_text_widget_bindings(self, widget):
+        """Enable standard text editing shortcuts for a given widget."""
+        widget.bind("<Control-c>", lambda e: widget.event_generate("<<Copy>>"))
+        widget.bind("<Control-v>", lambda e: widget.event_generate("<<Paste>>"))
+        widget.bind("<Control-x>", lambda e: widget.event_generate("<<Cut>>"))
+        widget.bind("<Control-a>", lambda e: widget.event_generate("<<SelectAll>>"))
+
     def toggle_proxy_entry(self):
         state = "normal" if self.use_proxy_check.get() else "disabled"
         self.proxy_entry.configure(state=state)
@@ -144,53 +159,104 @@ class JinaMDProcessor(ctk.CTk):
         self.system_prompt_edit.delete("1.0", "end")
         self.system_prompt_edit.insert("1.0", self.default_system_prompt)
 
-    def start_fetch_thread(self):
-        self.update_status("Processing...")
+    def start_fetch_threads(self):
+        urls_text = self.url_entry.get("1.0", "end-1c")
+        urls = [url.strip() for url in urls_text.splitlines() if url.strip()]
+
+        if not urls:
+            self.update_status("Error: No URLs provided.")
+            messagebox.showerror("Error", "Please enter at least one URL.")
+            return
+
         self.process_btn.configure(state="disabled")
+        self.active_threads = len(urls)
+        self.update_status(f"Starting processing for {self.active_threads} URL(s)...")
 
         use_selenium = bool(self.use_selenium_check.get())
         save_to_excel = bool(self.save_to_excel_check.get())
-        target_func = fetch_md_selenium if use_selenium else fetch_md
+        
+        # If using selenium, process sequentially in one thread
+        if use_selenium:
+            thread = threading.Thread(
+                target=self._run_selenium_task,
+                args=(urls, save_to_excel),
+                daemon=True
+            )
+            thread.start()
+        else: # Otherwise, process in parallel
+            for url in urls:
+                thread = threading.Thread(
+                    target=self._run_fetch_task,
+                    args=(
+                        fetch_md,
+                        url,
+                        save_to_excel,
+                    ),
+                    daemon=True,
+                )
+                thread.start()
 
-        thread = threading.Thread(
-            target=target_func,
-            args=(
-                self.url_entry.get().strip(),
+    def _run_fetch_task(self, target_func, url, save_to_excel):
+        """Wrapper to run a task and decrement the thread counter."""
+        try:
+            target_func(
+                url,
                 self.api_key,
                 bool(self.use_proxy_check.get()),
                 self.proxy_entry.get().strip(),
-                self.ui_queue,  # Pass the queue instead of a signal emitter
+                self.ui_queue,
                 self.user_prompt_template,
                 self.system_prompt_edit.get("1.0", "end-1c"),
                 save_to_excel,
-            ),
-            daemon=True,
-        )
-        thread.start()
+            )
+        finally:
+            with self.lock:
+                self.active_threads -= 1
+
+    def _run_selenium_task(self, urls, save_to_excel):
+        """Wrapper to run all selenium tasks sequentially in a single thread."""
+        try:
+            for i, url in enumerate(urls):
+                self.ui_queue.put(("update_status", f"[Selenium] Processing {i+1}/{len(urls)}: {url}"))
+                fetch_md_selenium(
+                    url,
+                    self.api_key,
+                    bool(self.use_proxy_check.get()),
+                    self.proxy_entry.get().strip(),
+                    self.ui_queue,
+                    self.user_prompt_template,
+                    self.system_prompt_edit.get("1.0", "end-1c"),
+                    save_to_excel,
+                )
+        finally:
+             with self.lock:
+                self.active_threads = 0 # All done in this one thread
 
     def check_queue(self):
         """Check the queue for messages and update the UI."""
         try:
-            message = self.ui_queue.get_nowait()
-            msg_type, data = message
-            if msg_type == "update_text":
-                widget_id, content = data
-                if widget_id == "raw":
-                    self.raw_md_area.delete("1.0", "end")
-                    self.raw_md_area.insert("1.0", content)
-                elif widget_id == "processed":
-                    self.processed_area.delete("1.0", "end")
-                    self.processed_area.insert("1.0", content)
-            elif msg_type == "update_status":
-                self.update_status(data)
-            elif msg_type == "enable_button":
-                self.process_btn.configure(state="normal")
-            elif msg_type == "error":
-                messagebox.showerror("Error", data)
+            while not self.ui_queue.empty():
+                message = self.ui_queue.get_nowait()
+                msg_type, data = message
+                if msg_type == "update_text":
+                    widget_id, content = data
+                    if widget_id == "raw":
+                        self.raw_md_area.delete("1.0", "end")
+                        self.raw_md_area.insert("1.0", content)
+                    elif widget_id == "processed":
+                        self.processed_area.delete("1.0", "end")
+                        self.processed_area.insert("1.0", content)
+                elif msg_type == "update_status":
+                    self.update_status(data)
+                elif msg_type == "error":
+                    messagebox.showerror("Error", data)
 
         except queue.Empty:
             pass
         finally:
+            if self.active_threads == 0 and self.process_btn.cget("state") == "disabled":
+                self.process_btn.configure(state="normal")
+                self.update_status("Ready")
             self.after(100, self.check_queue)
 
     def update_status(self, message):
