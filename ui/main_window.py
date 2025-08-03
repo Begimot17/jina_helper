@@ -328,6 +328,7 @@ class JinaMDProcessor(ctk.CTk):
                 save_excel=save_to_excel,
                 source_id=task_info.get("source_id"),
                 source_estate_id=task_info.get("source_estate_id"),
+                domain=task_info.get("domain"),
             )
         finally:
             with self.lock:
@@ -353,6 +354,7 @@ class JinaMDProcessor(ctk.CTk):
                     save_excel=save_to_excel,
                     source_id=task_info.get("source_id"),
                     source_estate_id=task_info.get("source_estate_id"),
+                    domain=task_info.get("domain"),
                 )
         finally:
             with self.lock:

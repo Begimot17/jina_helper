@@ -12,7 +12,12 @@ DATA_DIR = "data/results"
 
 
 def save_to_excel(
-    url, md_content, processed_content, source_id=None, source_estate_id=None
+    url,
+    md_content,
+    processed_content,
+    source_id=None,
+    source_estate_id=None,
+    domain=None,
 ):
     """Saves the provided data to a timestamped Excel file in the data/results directory."""
     try:
@@ -28,6 +33,7 @@ def save_to_excel(
             sheet.title = "Processed Data"
             sheet.append(
                 [
+                    "Domain",
                     "Source Estate ID",
                     "Source ID",
                     "URL",
@@ -39,7 +45,9 @@ def save_to_excel(
             workbook = openpyxl.load_workbook(excel_file)
             sheet = workbook.active
 
-        sheet.append([source_estate_id, source_id, url, md_content, processed_content])
+        sheet.append(
+            [domain, source_estate_id, source_id, url, md_content, processed_content]
+        )
         workbook.save(excel_file)
         return True, f"Saved to {excel_file}"
     except Exception as e:
@@ -57,6 +65,7 @@ def fetch_md(
     save_excel,
     source_id=None,
     source_estate_id=None,
+    domain=None,
 ):
     if not listing_url:
         ui_queue.put(("error", "Please enter a listing URL"))
@@ -93,6 +102,7 @@ def fetch_md(
                     processed_text,
                     source_id,
                     source_estate_id,
+                    domain,
                 )
                 status_message += f" | {message}"
                 if not success:
@@ -124,6 +134,7 @@ def fetch_md_selenium(
     save_excel,
     source_id=None,
     source_estate_id=None,
+    domain=None,
 ):
     if not listing_url:
         ui_queue.put(("error", "Please enter a listing URL"))
@@ -161,6 +172,7 @@ def fetch_md_selenium(
                 processed_text,
                 source_id,
                 source_estate_id,
+                domain,
             )
             status_message += f" | {message}"
             if not success:

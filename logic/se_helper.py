@@ -32,17 +32,31 @@ def get_urls_from_se_numbers(se_numbers: list[str]) -> list[dict]:
         # Create a string of placeholders (%s, %s, %s)
         placeholders = ", ".join(["%s"] * len(se_numbers_stripped))
         query = f"""
-        SELECT id, source_id, url
-        FROM source_estates
-        WHERE id IN ({placeholders})
-        """
+                SELECT id, source_id, url
+                FROM source_estates
+                WHERE id IN ({placeholders})
+                """
+        # query = f"""
+        # SELECT
+        #     se.id,
+        #     se.source_id,
+        #     se.url,
+        #     s.name AS domain
+        # FROM source_estates se
+        # JOIN sources s ON se.source_id = s.id
+        # WHERE se.id IN ({placeholders})"""
 
         cur.execute(query, se_numbers_stripped)
         rows = cur.fetchall()
 
         for row in rows:
             results.append(
-                {"source_estate_id": row[0], "source_id": row[1], "url": row[2]}
+                {
+                    "source_estate_id": row[0],
+                    "source_id": row[1],
+                    "url": row[2],
+                    "domain": None,
+                }
             )
 
         cur.close()
