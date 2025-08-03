@@ -103,7 +103,7 @@
 
     **Instructions:**
     1.  **Strict Extraction:** Fill in the JSON fields **only** with information explicitly found in the text.
-    2.  **Do Not Invent Data:** For fields that are not mentioned in the text (especially internal IDs like `uuid`, `bucket_id`, `estate_id`, etc.), use `null` as the value. Do not make up or infer data.
+    2.  **Do Not Invent Data:** For fields that are not mentioned in the text, use `null` as the value. Do not make up or infer data.
     3.  **Correct Data Types:** Ensure that numbers (like `price`, `total_area`) are represented as numbers, not strings. Text fields should be strings.
     4.  **Return Only JSON:** Your final output must be a single, valid JSON object and nothing else.
 
