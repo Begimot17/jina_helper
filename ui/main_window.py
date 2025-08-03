@@ -1,10 +1,11 @@
 import queue
 import threading
 from tkinter import messagebox
+import yaml
 
 import customtkinter as ctk
 
-from config import DEFAULT_SYSTEM_PROMPT, JINA_API_KEY, PROXY_URL, USER_PROMPT_TEMPLATE
+from config import JINA_API_KEY, PROXY_URL, USER_PROMPT_TEMPLATE
 from logic.processing import fetch_md, fetch_md_selenium
 from logic.se_helper import get_urls_from_se_numbers
 
@@ -20,8 +21,9 @@ class JinaMDProcessor(ctk.CTk):
 
         self.api_key = JINA_API_KEY
         self.proxy_url = PROXY_URL
-        self.default_system_prompt = DEFAULT_SYSTEM_PROMPT
         self.user_prompt_template = USER_PROMPT_TEMPLATE
+
+        self.prompts = self.load_prompts()
 
         self.ui_queue = queue.Queue()
         self.active_threads = 0
@@ -29,6 +31,17 @@ class JinaMDProcessor(ctk.CTk):
 
         self.init_ui()
         self.check_queue()
+
+    def load_prompts(self):
+        try:
+            with open("prompts.yaml", "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+        except FileNotFoundError:
+            messagebox.showerror("Error", "prompts.yaml not found!")
+            return [{"name": "Default", "text": "Please create a prompts.yaml file."}]
+        except yaml.YAMLError as e:
+            messagebox.showerror("YAML Error", f"Error parsing prompts.yaml: {e}")
+            return [{"name": "Error", "text": "Invalid YAML format."}]
 
     def init_ui(self):
         self.grid_columnconfigure(0, weight=1)
@@ -86,27 +99,40 @@ class JinaMDProcessor(ctk.CTk):
         self.tab_view.add("Original Markdown")
         self.tab_view.add("Processed Content")
 
-        self.tab_view.tab("Prompts & Controls").grid_columnconfigure(0, weight=1)
-        self.tab_view.tab("Prompts & Controls").grid_rowconfigure(1, weight=1)
+        prompts_tab = self.tab_view.tab("Prompts & Controls")
+        prompts_tab.grid_columnconfigure(0, weight=1)
+        prompts_tab.grid_rowconfigure(2, weight=1)
+
+        self.prompt_selection_frame = ctk.CTkFrame(prompts_tab)
+        self.prompt_selection_frame.grid(row=0, column=0, padx=10, pady=(10,0), sticky="ew")
+        self.prompt_selection_frame.grid_columnconfigure(1, weight=1)
+
+        self.prompt_label = ctk.CTkLabel(self.prompt_selection_frame, text="Select Prompt:")
+        self.prompt_label.grid(row=0, column=0, padx=10, pady=5)
+
+        prompt_names = [p["name"] for p in self.prompts]
+        self.prompt_menu = ctk.CTkOptionMenu(
+            self.prompt_selection_frame, values=prompt_names, command=self.on_prompt_select
+        )
+        self.prompt_menu.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
         self.system_prompt_label = ctk.CTkLabel(
-            self.tab_view.tab("Prompts & Controls"), text="System Prompt:"
+            prompts_tab, text="System Prompt:"
         )
         self.system_prompt_label.grid(
-            row=0, column=0, padx=10, pady=(10, 0), sticky="w"
+            row=1, column=0, padx=10, pady=(10, 0), sticky="w"
         )
         self.system_prompt_edit = ctk.CTkTextbox(
-            self.tab_view.tab("Prompts & Controls"), font=("Consolas", 12)
+            prompts_tab, font=("Consolas", 12)
         )
-        self.system_prompt_edit.insert("1.0", self.default_system_prompt)
-        self.system_prompt_edit.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+        self.system_prompt_edit.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
 
-        self.controls_frame = ctk.CTkFrame(self.tab_view.tab("Prompts & Controls"))
-        self.controls_frame.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
+        self.controls_frame = ctk.CTkFrame(prompts_tab)
+        self.controls_frame.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
 
         self.reset_prompt_btn = ctk.CTkButton(
             self.controls_frame,
-            text="Reset to Default",
+            text="Reset Prompt",
             command=self.reset_system_prompt,
         )
         self.reset_prompt_btn.pack(side="left", padx=10, pady=5)
@@ -138,6 +164,16 @@ class JinaMDProcessor(ctk.CTk):
         self._enable_text_widget_bindings(self.raw_md_area)
         self._enable_text_widget_bindings(self.processed_area)
 
+        # Set default prompt
+        self.on_prompt_select(prompt_names[0])
+
+    def on_prompt_select(self, selected_prompt_name):
+        for prompt in self.prompts:
+            if prompt["name"] == selected_prompt_name:
+                self.system_prompt_edit.delete("1.0", "end")
+                self.system_prompt_edit.insert("1.0", prompt["text"])
+                break
+
     def _enable_text_widget_bindings(self, widget):
         widget.bind("<Control-c>", lambda e: widget.event_generate("<<Copy>>"))
         widget.bind("<Control-v>", lambda e: widget.event_generate("<<Paste>>"))
@@ -150,8 +186,8 @@ class JinaMDProcessor(ctk.CTk):
         self.proxy_label.configure(state=state)
 
     def reset_system_prompt(self):
-        self.system_prompt_edit.delete("1.0", "end")
-        self.system_prompt_edit.insert("1.0", self.default_system_prompt)
+        selected_prompt_name = self.prompt_menu.get()
+        self.on_prompt_select(selected_prompt_name)
 
     def start_fetch_threads(self):
         inputs = self.url_entry.get("1.0", "end-1c").splitlines()
@@ -164,7 +200,6 @@ class JinaMDProcessor(ctk.CTk):
         self.process_btn.configure(state="disabled")
         self.update_status("Starting processing...")
 
-        # Decide if we need to convert SE numbers to URLs first
         if self.is_se_check.get():
             try:
                 self.update_status("Converting SE numbers to URLs...")
