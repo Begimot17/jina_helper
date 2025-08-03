@@ -6,6 +6,7 @@ import customtkinter as ctk
 
 from config import DEFAULT_SYSTEM_PROMPT, JINA_API_KEY, PROXY_URL, USER_PROMPT_TEMPLATE
 from logic.processing import fetch_md, fetch_md_selenium
+from logic.se_helper import get_urls_from_se_numbers
 
 
 class JinaMDProcessor(ctk.CTk):
@@ -33,7 +34,6 @@ class JinaMDProcessor(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(3, weight=1)
 
-        # Header
         self.header = ctk.CTkLabel(
             self,
             text="Jina.ai Markdown Processor",
@@ -41,19 +41,19 @@ class JinaMDProcessor(ctk.CTk):
         )
         self.header.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        # URL input
         self.url_frame = ctk.CTkFrame(self)
         self.url_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
         self.url_frame.grid_columnconfigure(1, weight=1)
-        self.url_label = ctk.CTkLabel(self.url_frame, text="Listing URLs (one per line):")
+        self.url_label = ctk.CTkLabel(
+            self.url_frame, text="Input (URLs or SE Numbers):"
+        )
         self.url_label.grid(row=0, column=0, padx=10, pady=5)
         self.url_entry = ctk.CTkTextbox(self.url_frame, height=100)
         self.url_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
-        # Options
         self.options_frame = ctk.CTkFrame(self)
         self.options_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
-        self.options_frame.grid_columnconfigure(4, weight=1)
+        self.options_frame.grid_columnconfigure(5, weight=1)
         self.use_proxy_check = ctk.CTkCheckBox(
             self.options_frame, text="Use Proxy", command=self.toggle_proxy_entry
         )
@@ -66,23 +66,26 @@ class JinaMDProcessor(ctk.CTk):
             self.options_frame, text="Save to Excel"
         )
         self.save_to_excel_check.grid(row=0, column=2, padx=10, pady=5)
+        self.is_se_check = ctk.CTkCheckBox(
+            self.options_frame, text="Input are SE Numbers"
+        )
+        self.is_se_check.grid(row=0, column=3, padx=10, pady=5)
+
         self.proxy_label = ctk.CTkLabel(self.options_frame, text="Proxy:")
-        self.proxy_label.grid(row=0, column=3, padx=10, pady=5)
+        self.proxy_label.grid(row=0, column=4, padx=10, pady=5)
         self.proxy_entry = ctk.CTkEntry(self.options_frame)
-        self.proxy_entry.grid(row=0, column=4, padx=10, pady=5, sticky="ew")
+        self.proxy_entry.grid(row=0, column=5, padx=10, pady=5, sticky="ew")
         if self.proxy_url:
             self.proxy_entry.insert(0, self.proxy_url)
             self.use_proxy_check.select()
         self.toggle_proxy_entry()
 
-        # Tabs
         self.tab_view = ctk.CTkTabview(self)
         self.tab_view.grid(row=3, column=0, padx=10, pady=5, sticky="nsew")
         self.tab_view.add("Prompts & Controls")
         self.tab_view.add("Original Markdown")
         self.tab_view.add("Processed Content")
 
-        # Prompts Tab
         self.tab_view.tab("Prompts & Controls").grid_columnconfigure(0, weight=1)
         self.tab_view.tab("Prompts & Controls").grid_rowconfigure(1, weight=1)
 
@@ -116,27 +119,19 @@ class JinaMDProcessor(ctk.CTk):
         )
         self.process_btn.pack(side="right", padx=10, pady=5)
 
-        # Raw MD Tab
-        self.tab_view.tab("Original Markdown").grid_columnconfigure(0, weight=1)
-        self.tab_view.tab("Original Markdown").grid_rowconfigure(0, weight=1)
         self.raw_md_area = ctk.CTkTextbox(
             self.tab_view.tab("Original Markdown"), font=("Consolas", 12)
         )
         self.raw_md_area.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
 
-        # Processed Tab
-        self.tab_view.tab("Processed Content").grid_columnconfigure(0, weight=1)
-        self.tab_view.tab("Processed Content").grid_rowconfigure(0, weight=1)
         self.processed_area = ctk.CTkTextbox(
             self.tab_view.tab("Processed Content"), font=("Consolas", 12)
         )
         self.processed_area.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
 
-        # Status bar
         self.status_bar = ctk.CTkLabel(self, text="Ready", anchor="w")
         self.status_bar.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
 
-        # Enable standard text editing shortcuts
         self._enable_text_widget_bindings(self.url_entry)
         self._enable_text_widget_bindings(self.proxy_entry)
         self._enable_text_widget_bindings(self.system_prompt_edit)
@@ -144,7 +139,6 @@ class JinaMDProcessor(ctk.CTk):
         self._enable_text_widget_bindings(self.processed_area)
 
     def _enable_text_widget_bindings(self, widget):
-        """Enable standard text editing shortcuts for a given widget."""
         widget.bind("<Control-c>", lambda e: widget.event_generate("<<Copy>>"))
         widget.bind("<Control-v>", lambda e: widget.event_generate("<<Paste>>"))
         widget.bind("<Control-x>", lambda e: widget.event_generate("<<Cut>>"))
@@ -160,80 +154,103 @@ class JinaMDProcessor(ctk.CTk):
         self.system_prompt_edit.insert("1.0", self.default_system_prompt)
 
     def start_fetch_threads(self):
-        urls_text = self.url_entry.get("1.0", "end-1c")
-        urls = [url.strip() for url in urls_text.splitlines() if url.strip()]
+        inputs = self.url_entry.get("1.0", "end-1c").splitlines()
+        inputs = [i.strip() for i in inputs if i.strip()]
 
-        if not urls:
-            self.update_status("Error: No URLs provided.")
-            messagebox.showerror("Error", "Please enter at least one URL.")
+        if not inputs:
+            messagebox.showerror("Error", "Please provide at least one input.")
             return
 
         self.process_btn.configure(state="disabled")
-        self.active_threads = len(urls)
-        self.update_status(f"Starting processing for {self.active_threads} URL(s)...")
+        self.update_status("Starting processing...")
+
+        # Decide if we need to convert SE numbers to URLs first
+        if self.is_se_check.get():
+            try:
+                self.update_status("Converting SE numbers to URLs...")
+                tasks = get_urls_from_se_numbers(inputs)
+                if not tasks:
+                    messagebox.showerror(
+                        "Error", "Could not convert any SE numbers to URLs."
+                    )
+                    self.process_btn.configure(state="normal")
+                    return
+            except Exception as e:
+                messagebox.showerror(
+                    "SE Helper Error", f"Failed to get URLs from SE numbers: {e}"
+                )
+                self.process_btn.configure(state="normal")
+                return
+        else:
+            tasks = [
+                {"url": url, "source_id": None, "source_estate_id": None}
+                for url in inputs
+            ]
+
+        self.active_threads = len(tasks)
+        self.update_status(f"Processing {self.active_threads} items...")
 
         use_selenium = bool(self.use_selenium_check.get())
         save_to_excel = bool(self.save_to_excel_check.get())
-        
-        # If using selenium, process sequentially in one thread
+
         if use_selenium:
             thread = threading.Thread(
-                target=self._run_selenium_task,
-                args=(urls, save_to_excel),
-                daemon=True
+                target=self._run_selenium_task, args=(tasks, save_to_excel), daemon=True
             )
             thread.start()
-        else: # Otherwise, process in parallel
-            for url in urls:
+        else:
+            for task in tasks:
                 thread = threading.Thread(
                     target=self._run_fetch_task,
-                    args=(
-                        fetch_md,
-                        url,
-                        save_to_excel,
-                    ),
+                    args=(fetch_md, task, save_to_excel),
                     daemon=True,
                 )
                 thread.start()
 
-    def _run_fetch_task(self, target_func, url, save_to_excel):
-        """Wrapper to run a task and decrement the thread counter."""
+    def _run_fetch_task(self, target_func, task_info, save_to_excel):
         try:
             target_func(
-                url,
-                self.api_key,
-                bool(self.use_proxy_check.get()),
-                self.proxy_entry.get().strip(),
-                self.ui_queue,
-                self.user_prompt_template,
-                self.system_prompt_edit.get("1.0", "end-1c"),
-                save_to_excel,
+                listing_url=task_info["url"],
+                api_key=self.api_key,
+                use_proxy=bool(self.use_proxy_check.get()),
+                proxy_url=self.proxy_entry.get().strip(),
+                ui_queue=self.ui_queue,
+                user_prompt_template=self.user_prompt_template,
+                system_prompt_text=self.system_prompt_edit.get("1.0", "end-1c"),
+                save_excel=save_to_excel,
+                source_id=task_info.get("source_id"),
+                source_estate_id=task_info.get("source_estate_id"),
             )
         finally:
             with self.lock:
                 self.active_threads -= 1
 
-    def _run_selenium_task(self, urls, save_to_excel):
-        """Wrapper to run all selenium tasks sequentially in a single thread."""
+    def _run_selenium_task(self, tasks, save_to_excel):
         try:
-            for i, url in enumerate(urls):
-                self.ui_queue.put(("update_status", f"[Selenium] Processing {i+1}/{len(urls)}: {url}"))
+            for i, task_info in enumerate(tasks):
+                self.ui_queue.put(
+                    (
+                        "update_status",
+                        f"[Selenium] Processing {i + 1}/{len(tasks)}: {task_info['url']}",
+                    )
+                )
                 fetch_md_selenium(
-                    url,
-                    self.api_key,
-                    bool(self.use_proxy_check.get()),
-                    self.proxy_entry.get().strip(),
-                    self.ui_queue,
-                    self.user_prompt_template,
-                    self.system_prompt_edit.get("1.0", "end-1c"),
-                    save_to_excel,
+                    listing_url=task_info["url"],
+                    api_key=self.api_key,
+                    use_proxy=bool(self.use_proxy_check.get()),
+                    proxy_url=self.proxy_entry.get().strip(),
+                    ui_queue=self.ui_queue,
+                    user_prompt_template=self.user_prompt_template,
+                    system_prompt_text=self.system_prompt_edit.get("1.0", "end-1c"),
+                    save_excel=save_to_excel,
+                    source_id=task_info.get("source_id"),
+                    source_estate_id=task_info.get("source_estate_id"),
                 )
         finally:
-             with self.lock:
-                self.active_threads = 0 # All done in this one thread
+            with self.lock:
+                self.active_threads = 0
 
     def check_queue(self):
-        """Check the queue for messages and update the UI."""
         try:
             while not self.ui_queue.empty():
                 message = self.ui_queue.get_nowait()
@@ -254,7 +271,10 @@ class JinaMDProcessor(ctk.CTk):
         except queue.Empty:
             pass
         finally:
-            if self.active_threads == 0 and self.process_btn.cget("state") == "disabled":
+            if (
+                self.active_threads == 0
+                and self.process_btn.cget("state") == "disabled"
+            ):
                 self.process_btn.configure(state="normal")
                 self.update_status("Ready")
             self.after(100, self.check_queue)
