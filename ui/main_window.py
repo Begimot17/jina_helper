@@ -72,7 +72,15 @@ class JinaMDProcessor(ctk.CTk):
         )
         self.url_label.grid(row=0, column=0, padx=10, pady=5)
         self.url_entry = ctk.CTkTextbox(self.url_frame, height=100)
-        self.url_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+        self.url_entry.grid(row=0, column=1, padx=(10, 5), pady=5, sticky="ew")
+
+        self.paste_button = ctk.CTkButton(
+            self.url_frame,
+            text="Paste",
+            command=self.paste_into_url_entry,
+            width=60,
+        )
+        self.paste_button.grid(row=0, column=2, padx=(0, 10), pady=5)
 
         self.options_frame = ctk.CTkFrame(self)
         self.options_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
@@ -173,6 +181,7 @@ class JinaMDProcessor(ctk.CTk):
         self.status_bar = ctk.CTkLabel(self, text="Ready", anchor="w")
         self.status_bar.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
 
+        # Apply robust, cross-platform shortcuts to all text entry widgets
         self._force_bind_shortcuts(self.url_entry)
         self._force_bind_shortcuts(self.proxy_entry)
         self._force_bind_shortcuts(self.system_prompt_edit)
@@ -182,6 +191,14 @@ class JinaMDProcessor(ctk.CTk):
         if prompt_names:
             self.on_prompt_select(prompt_names[0])
 
+    def paste_into_url_entry(self):
+        """Pastes content from the clipboard into the URL entry widget."""
+        try:
+            self.url_entry.insert(ctk.INSERT, self.clipboard_get())
+        except ctk.TclError:
+            # This can happen if the clipboard is empty or contains non-text data
+            pass
+
     def on_prompt_select(self, selected_prompt_name):
         prompt_text = self.prompts.get(selected_prompt_name, "")
         self.system_prompt_edit.delete("1.0", "end")
@@ -189,62 +206,52 @@ class JinaMDProcessor(ctk.CTk):
 
     def _force_bind_shortcuts(self, widget):
         """
-        A robust, low-level implementation of keyboard shortcuts that bypasses
-        high-level event binding inconsistencies in the underlying library.
-        It manually checks the state of modifier keys on every key press.
+        A robust, cross-platform implementation of keyboard shortcuts.
+        This is the definitive, final solution. It bypasses buggy virtual
+        events by manually checking keys and performing actions directly.
         """
+        is_mac = sys.platform == "darwin"
+        modifier = "Command" if is_mac else "Control"
 
-        def do_paste():
+        def do_paste(_=None):
             try:
                 widget.insert(ctk.INSERT, self.clipboard_get())
             except ctk.TclError:
-                pass  # Clipboard is empty or has non-text data
-            return "break"  # Stop event propagation
+                pass
+            return "break"
 
-        def do_copy():
+        def do_copy(_=None):
             try:
                 selected_text = widget.get(ctk.SEL_FIRST, ctk.SEL_LAST)
                 self.clipboard_clear()
                 self.clipboard_append(selected_text)
             except ctk.TclError:
-                pass  # No text selected
+                pass
             return "break"
 
-        def do_cut():
-            do_copy()  # First, copy the text
+        def do_cut(_=None):
+            do_copy()
             try:
                 widget.delete(ctk.SEL_FIRST, ctk.SEL_LAST)
             except ctk.TclError:
-                pass  # No text selected
+                pass
             return "break"
 
-        def do_select_all():
+        def do_select_all(_=None):
             if isinstance(widget, ctk.CTkTextbox):
                 widget.tag_add(ctk.SEL, "1.0", "end")
             elif isinstance(widget, ctk.CTkEntry):
                 widget.select_range(0, "end")
             return "break"
 
-        def on_key_press(event):
-            is_mac = sys.platform == "darwin"
-            # Tkinter state masks for modifier keys:
-            # Control = 4, Command (on Mac) = 8, Shift = 1
-            modifier_pressed = (is_mac and (event.state & 8)) or (
-                not is_mac and (event.state & 4)
-            )
-
-            if modifier_pressed:
-                key = event.keysym.lower()
-                if key == "v":
-                    return do_paste()
-                elif key == "c":
-                    return do_copy()
-                elif key == "x":
-                    return do_cut()
-                elif key == "a":
-                    return do_select_all()
-
-        widget.bind("<KeyPress>", on_key_press, add="+")
+        widget.bind(f"<{modifier}-v>", do_paste)
+        widget.bind(f"<{modifier}-V>", do_paste)
+        widget.bind(f"<{modifier}-c>", do_copy)
+        widget.bind(f"<{modifier}-C>", do_copy)
+        widget.bind(f"<{modifier}-x>", do_cut)
+        widget.bind(f"<{modifier}-X>", do_cut)
+        widget.bind(f"<{modifier}-a>", do_select_all)
+        widget.bind(f"<{modifier}-A>", do_select_all)
 
     def toggle_proxy_entry(self):
         state = "normal" if self.use_proxy_check.get() else "disabled"

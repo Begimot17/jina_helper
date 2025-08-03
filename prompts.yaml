@@ -43,51 +43,39 @@
     Special Cases
     - Other (ID:15): Non-classifiable properties
 
-    Development (replaces New Development): Under-construction or recently built properties (any type)
+- name: "Key Facts Summary"
+  text: |
+    Analyze the provided real estate listing and generate a concise, bullet-point summary of the key facts.
+    Focus on the most important information a potential buyer would need.
+    - Property Type:
+    - Price:
+    - Area:
+    - Bedrooms:
+    - Bathrooms:
+    - Key Feature 1:
+    - Key Feature 2:
 
-    Key Identification Rules
-    Primary Identification Factors:
-    - Source listing title (50% weight)
-    - Description keywords (30% weight)
-    - Visual features in photos (20% weight)
-    Language-Specific Rules:
-    - Must recognize localized terms (e.g., "ático"=Penthouse in ES)
-    - Country-specific exceptions apply (e.g., French "château"=Palace)
-    Floor-Based Rules:
-    - Single-floor units: Studio/Bungalow
-    - Multi-floor in building: Apartment/Duplex
-    - Top-floor with terrace: Penthouse
+- name: "Pros and Cons"
+  text: |
+    Act as a real estate analyst. Based on the provided listing text, identify and list the potential pros (advantages) and cons (disadvantages) of the property.
+    
+    **Pros:**
+    - [List positive aspects, e.g., "Good location," "Recently renovated," "Has a balcony"]
+    
+    **Cons:**
+    - [List negative or ambiguous aspects, e.g., "Ground floor," "No photos of the kitchen," "Vague description of condition"]
 
-    Size Thresholds:
-    - <50m² likely Studio
-    - 50-150m² standard Apartment/House
-    - >150m² likely Villa/Palace
-    - Commercial Indicators:
-    - "For business use" → Commercial type
-    - Zoning information overrides other indicators
-    - Exception Handling
-    Conflicting Indicators:
-    - When title says "House" but photos show apartment → verify with description
-    - Commercial terms in residential listing → flag for review
-    Development Properties:
-    - Must show construction status/permits
-    - Cannot be rehabilitation projects
-    - Acceptable conditions: New/Good/Very Good
-    - Manual Override Rules:
-    - Only when automated classification fails
-    - Requires secondary verification
-    - Must document reasoning
-    Validation Process
-    Automated checks for:
-    - Type-size consistency
-    - Location-type compatibility
-    - Photo-type alignment
-    Quarterly reviews of:
-    - New property terms
-    Classification accuracy
-    Regional exceptions
-    Present the information in clear, well-organized sections with appropriate headings.
-    Use markdown formatting for better readability.
+- name: "Red Flag Detector"
+  text: |
+    Analyze the provided real estate listing for potential "red flags" or warning signs.
+    Look for phrases that might indicate hidden problems, urgency, or issues with the property.
+    List any red flags you find. Examples include:
+    - "Sold as-is"
+    - "Price negotiable" or "Urgent sale"
+    - "Investment opportunity" (could mean it's in poor condition)
+    - "Tenant in place"
+    - Lack of photos for key rooms
+    - Vague or overly emotional language
 
 - name: "Property Type Classifier"
   text: |
@@ -108,3 +96,99 @@
     - Chalet (ID:19)
     - Bungalow (ID:30)
     - Room (ID:29)
+
+- name: "Full JSON Extractor (DB Schema)"
+  text: |
+    Analyze the real estate listing text below. Your task is to extract all available information and structure it as a JSON object that matches the database schema.
+
+    **Instructions:**
+    1.  **Strict Extraction:** Fill in the JSON fields **only** with information explicitly found in the text.
+    2.  **Do Not Invent Data:** For fields that are not mentioned in the text (especially internal IDs like `uuid`, `bucket_id`, `estate_id`, etc.), use `null` as the value. Do not make up or infer data.
+    3.  **Correct Data Types:** Ensure that numbers (like `price`, `total_area`) are represented as numbers, not strings. Text fields should be strings.
+    4.  **Return Only JSON:** Your final output must be a single, valid JSON object and nothing else.
+
+    **JSON Schema to Fill:**
+    ```json
+    {
+      "country_code": null,
+      "uid": null,
+      "ref": null,
+      "ref2": null,
+      "cadastral_ref": null,
+      "status": null,
+      "rent_status": null,
+      "province_id": null,
+      "root_location_ids": [],
+      "total_photos": null,
+      "location": null,
+      "location_id": null,
+      "subtype": null,
+      "type_id": null,
+      "new_development": false,
+      "bank": false,
+      "auction": false,
+      "features_list": [],
+      "labels": [],
+      "floor_number": null,
+      "condition_type": null,
+      "price": null,
+      "rent_price": null,
+      "price_from": null,
+      "rent_price_from": null,
+      "rent_price_per_sqm": null,
+      "rent_period": null,
+      "rooms": null,
+      "bedrooms": null,
+      "bathrooms": null,
+      "total_area": null,
+      "living_area": null,
+      "plot_area": null,
+      "terrace_area": null,
+      "title": "",
+      "description": "",
+      "features": "",
+      "description_2": "",
+      "construction_year": null,
+      "parking": null,
+      "heating": null,
+      "fire_type": null,
+      "floor_type": null,
+      "condition": null,
+      "garage": null,
+      "energy_rating": null,
+      "energy_consumption": null,
+      "ghg_rating": null,
+      "ghg_emissions": null,
+      "company": null,
+      "contacts": null,
+      "listing_agent": null,
+      "phone": null,
+      "url": null,
+      "parsing_url": null,
+      "coordinates_source": null,
+      "latitude": null,
+      "longitude": null,
+      "address": null,
+      "zipcode": null,
+      "status_2": null,
+      "source_location_id": null,
+      "subtype_source": null,
+      "subtype_model_probability": null,
+      "currency": null,
+      "rent_currency": null,
+      "fields_updated_at": null,
+      "photos_hash": null,
+      "block_photos_hash": null,
+      "is_private": false,
+      "transfer_price": null,
+      "processing_meta": null,
+      "fields_mask": null,
+      "misc": null,
+      "ref_normalized": null,
+      "agency_legal_id": null
+    }
+    ```
+
+    **Real Estate Listing Text:**
+    ---
+    [PASTE REAL ESTATE LISTING TEXT HERE]
