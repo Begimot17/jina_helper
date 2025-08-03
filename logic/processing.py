@@ -1,9 +1,46 @@
+import os
 import time
+from datetime import datetime
 
+import openpyxl
 import requests
 import undetected_chromedriver as uc
 from g4f.client import Client
 from markdownify import markdownify as md
+
+DATA_DIR = "data/results"
+
+
+def save_to_excel(url, md_content, processed_content):
+    """Saves the provided data to a timestamped Excel file in the data/results directory."""
+    try:
+        # Ensure the directory exists
+        os.makedirs(DATA_DIR, exist_ok=True)
+
+        # Generate filename based on current date and time
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        excel_file = os.path.join(DATA_DIR, f"{timestamp}.xlsx")
+
+        # Check if file exists to decide on writing headers
+        write_header = not os.path.exists(excel_file)
+
+        if write_header:
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.title = "Processed Data"
+            sheet.append(["URL", "Raw Markdown", "Processed Content"])
+        else:
+            # This logic assumes we append to the same file within a minute,
+            # which is unlikely but safe. A more robust approach might be to always create a new file.
+            # For this use case, creating a new file per minute is fine.
+            workbook = openpyxl.load_workbook(excel_file)
+            sheet = workbook.active
+
+        sheet.append([url, md_content, processed_content])
+        workbook.save(excel_file)
+        return True, f"Saved to {excel_file}"
+    except Exception as e:
+        return False, f"Failed to save to Excel: {e}"
 
 
 def fetch_md(
@@ -14,6 +51,7 @@ def fetch_md(
     ui_queue,
     user_prompt_template,
     system_prompt_text,
+    save_excel,
 ):
     if not listing_url:
         ui_queue.put(("error", "Please enter a listing URL"))
@@ -41,7 +79,18 @@ def fetch_md(
                 md_content, user_prompt_template, system_prompt_text
             )
             ui_queue.put(("update_text", ("processed", processed_text)))
-            ui_queue.put(("update_status", "Completed successfully"))
+
+            status_message = "Completed successfully"
+            if save_excel:
+                success, message = save_to_excel(
+                    listing_url, md_content, processed_text
+                )
+                status_message += f" | {message}"
+                if not success:
+                    ui_queue.put(("error", message))
+
+            ui_queue.put(("update_status", status_message))
+
         else:
             error_msg = f"API Error {response.status_code}: {response.text}"
             ui_queue.put(("error", error_msg))
@@ -63,6 +112,7 @@ def fetch_md_selenium(
     ui_queue,
     user_prompt_template,
     system_prompt_text,
+    save_excel,
 ):
     if not listing_url:
         ui_queue.put(("error", "Please enter a listing URL"))
@@ -91,7 +141,15 @@ def fetch_md_selenium(
             md_content, user_prompt_template, system_prompt_text
         )
         ui_queue.put(("update_text", ("processed", processed_text)))
-        ui_queue.put(("update_status", "Completed successfully via Selenium"))
+
+        status_message = "Completed successfully via Selenium"
+        if save_excel:
+            success, message = save_to_excel(listing_url, md_content, processed_text)
+            status_message += f" | {message}"
+            if not success:
+                ui_queue.put(("error", message))
+
+        ui_queue.put(("update_status", status_message))
 
     except Exception as e:
         error_msg = f"Selenium failed: {str(e)}"

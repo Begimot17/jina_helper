@@ -52,7 +52,7 @@ class JinaMDProcessor(ctk.CTk):
         # Options
         self.options_frame = ctk.CTkFrame(self)
         self.options_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
-        self.options_frame.grid_columnconfigure(3, weight=1)
+        self.options_frame.grid_columnconfigure(4, weight=1)
         self.use_proxy_check = ctk.CTkCheckBox(
             self.options_frame, text="Use Proxy", command=self.toggle_proxy_entry
         )
@@ -61,10 +61,14 @@ class JinaMDProcessor(ctk.CTk):
             self.options_frame, text="Use Selenium"
         )
         self.use_selenium_check.grid(row=0, column=1, padx=10, pady=5)
+        self.save_to_excel_check = ctk.CTkCheckBox(
+            self.options_frame, text="Save to Excel"
+        )
+        self.save_to_excel_check.grid(row=0, column=2, padx=10, pady=5)
         self.proxy_label = ctk.CTkLabel(self.options_frame, text="Proxy:")
-        self.proxy_label.grid(row=0, column=2, padx=10, pady=5)
+        self.proxy_label.grid(row=0, column=3, padx=10, pady=5)
         self.proxy_entry = ctk.CTkEntry(self.options_frame)
-        self.proxy_entry.grid(row=0, column=3, padx=10, pady=5, sticky="ew")
+        self.proxy_entry.grid(row=0, column=4, padx=10, pady=5, sticky="ew")
         if self.proxy_url:
             self.proxy_entry.insert(0, self.proxy_url)
             self.use_proxy_check.select()
@@ -145,6 +149,7 @@ class JinaMDProcessor(ctk.CTk):
         self.process_btn.configure(state="disabled")
 
         use_selenium = bool(self.use_selenium_check.get())
+        save_to_excel = bool(self.save_to_excel_check.get())
         target_func = fetch_md_selenium if use_selenium else fetch_md
 
         thread = threading.Thread(
@@ -157,6 +162,7 @@ class JinaMDProcessor(ctk.CTk):
                 self.ui_queue,  # Pass the queue instead of a signal emitter
                 self.user_prompt_template,
                 self.system_prompt_edit.get("1.0", "end-1c"),
+                save_to_excel,
             ),
             daemon=True,
         )
