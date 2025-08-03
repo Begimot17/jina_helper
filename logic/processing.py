@@ -37,7 +37,7 @@ def save_to_excel(
                     "Source Estate ID",
                     "Source ID",
                     "URL",
-                    "Raw Markdown",
+                    # "Raw Markdown",
                     "Processed Content",
                 ]
             )
@@ -46,7 +46,14 @@ def save_to_excel(
             sheet = workbook.active
 
         sheet.append(
-            [domain, source_estate_id, source_id, url, md_content, processed_content]
+            [
+                domain,
+                source_estate_id,
+                source_id,
+                url,
+                # md_content,
+                processed_content,
+            ]
         )
         workbook.save(excel_file)
         return True, f"Saved to {excel_file}"
