@@ -1,9 +1,10 @@
 import queue
+import sys
 import threading
 from tkinter import messagebox
-import yaml
 
 import customtkinter as ctk
+import yaml
 
 from config import JINA_API_KEY, PROXY_URL, USER_PROMPT_TEMPLATE
 from logic.processing import fetch_md, fetch_md_selenium
@@ -40,8 +41,7 @@ class JinaMDProcessor(ctk.CTk):
                     raise yaml.YAMLError(
                         "The root of prompts.yaml should be a list of objects."
                     )
-                # Convert list of dicts to a single dict for easier lookup
-                prompts_dict = {p['name']: p['text'] for p in prompts_list}
+                prompts_dict = {p["name"]: p["text"] for p in prompts_list}
                 return prompts_dict
         except FileNotFoundError:
             messagebox.showerror("Error", "prompts.yaml not found!")
@@ -85,14 +85,17 @@ class JinaMDProcessor(ctk.CTk):
             self.options_frame, text="Use Selenium"
         )
         self.use_selenium_check.grid(row=0, column=1, padx=10, pady=5)
+        self.use_selenium_check.select()
         self.save_to_excel_check = ctk.CTkCheckBox(
             self.options_frame, text="Save to Excel"
         )
         self.save_to_excel_check.grid(row=0, column=2, padx=10, pady=5)
+        self.save_to_excel_check.select()
         self.is_se_check = ctk.CTkCheckBox(
             self.options_frame, text="Input are SE Numbers"
         )
         self.is_se_check.grid(row=0, column=3, padx=10, pady=5)
+        self.is_se_check.select()
 
         self.proxy_label = ctk.CTkLabel(self.options_frame, text="Proxy:")
         self.proxy_label.grid(row=0, column=4, padx=10, pady=5)
@@ -114,27 +117,29 @@ class JinaMDProcessor(ctk.CTk):
         prompts_tab.grid_rowconfigure(2, weight=1)
 
         self.prompt_selection_frame = ctk.CTkFrame(prompts_tab)
-        self.prompt_selection_frame.grid(row=0, column=0, padx=10, pady=(10,0), sticky="ew")
+        self.prompt_selection_frame.grid(
+            row=0, column=0, padx=10, pady=(10, 0), sticky="ew"
+        )
         self.prompt_selection_frame.grid_columnconfigure(1, weight=1)
 
-        self.prompt_label = ctk.CTkLabel(self.prompt_selection_frame, text="Select Prompt:")
+        self.prompt_label = ctk.CTkLabel(
+            self.prompt_selection_frame, text="Select Prompt:"
+        )
         self.prompt_label.grid(row=0, column=0, padx=10, pady=5)
 
         prompt_names = list(self.prompts.keys())
         self.prompt_menu = ctk.CTkOptionMenu(
-            self.prompt_selection_frame, values=prompt_names, command=self.on_prompt_select
+            self.prompt_selection_frame,
+            values=prompt_names,
+            command=self.on_prompt_select,
         )
         self.prompt_menu.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
-        self.system_prompt_label = ctk.CTkLabel(
-            prompts_tab, text="System Prompt:"
-        )
+        self.system_prompt_label = ctk.CTkLabel(prompts_tab, text="System Prompt:")
         self.system_prompt_label.grid(
             row=1, column=0, padx=10, pady=(10, 0), sticky="w"
         )
-        self.system_prompt_edit = ctk.CTkTextbox(
-            prompts_tab, font=("Consolas", 12)
-        )
+        self.system_prompt_edit = ctk.CTkTextbox(prompts_tab, font=("Consolas", 12))
         self.system_prompt_edit.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
 
         self.controls_frame = ctk.CTkFrame(prompts_tab)
@@ -168,13 +173,12 @@ class JinaMDProcessor(ctk.CTk):
         self.status_bar = ctk.CTkLabel(self, text="Ready", anchor="w")
         self.status_bar.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
 
-        self._enable_text_widget_bindings(self.url_entry)
-        self._enable_text_widget_bindings(self.proxy_entry)
-        self._enable_text_widget_bindings(self.system_prompt_edit)
-        self._enable_text_widget_bindings(self.raw_md_area)
-        self._enable_text_widget_bindings(self.processed_area)
+        self._force_bind_shortcuts(self.url_entry)
+        self._force_bind_shortcuts(self.proxy_entry)
+        self._force_bind_shortcuts(self.system_prompt_edit)
+        self._force_bind_shortcuts(self.raw_md_area)
+        self._force_bind_shortcuts(self.processed_area)
 
-        # Set default prompt
         if prompt_names:
             self.on_prompt_select(prompt_names[0])
 
@@ -183,20 +187,64 @@ class JinaMDProcessor(ctk.CTk):
         self.system_prompt_edit.delete("1.0", "end")
         self.system_prompt_edit.insert("1.0", prompt_text)
 
-    def _enable_text_widget_bindings(self, widget):
-        def on_copy(event=None): widget.event_generate("<<Copy>>")
-        def on_paste(event=None): widget.event_generate("<<Paste>>")
-        def on_cut(event=None): widget.event_generate("<<Cut>>")
-        def on_select_all(event=None): widget.event_generate("<<SelectAll>>")
+    def _force_bind_shortcuts(self, widget):
+        """
+        A robust, low-level implementation of keyboard shortcuts that bypasses
+        high-level event binding inconsistencies in the underlying library.
+        It manually checks the state of modifier keys on every key press.
+        """
 
-        widget.bind("<Control-c>", on_copy)
-        widget.bind("<Control-C>", on_copy)
-        widget.bind("<Control-v>", on_paste)
-        widget.bind("<Control-V>", on_paste)
-        widget.bind("<Control-x>", on_cut)
-        widget.bind("<Control-X>", on_cut)
-        widget.bind("<Control-a>", on_select_all)
-        widget.bind("<Control-A>", on_select_all)
+        def do_paste():
+            try:
+                widget.insert(ctk.INSERT, self.clipboard_get())
+            except ctk.TclError:
+                pass  # Clipboard is empty or has non-text data
+            return "break"  # Stop event propagation
+
+        def do_copy():
+            try:
+                selected_text = widget.get(ctk.SEL_FIRST, ctk.SEL_LAST)
+                self.clipboard_clear()
+                self.clipboard_append(selected_text)
+            except ctk.TclError:
+                pass  # No text selected
+            return "break"
+
+        def do_cut():
+            do_copy()  # First, copy the text
+            try:
+                widget.delete(ctk.SEL_FIRST, ctk.SEL_LAST)
+            except ctk.TclError:
+                pass  # No text selected
+            return "break"
+
+        def do_select_all():
+            if isinstance(widget, ctk.CTkTextbox):
+                widget.tag_add(ctk.SEL, "1.0", "end")
+            elif isinstance(widget, ctk.CTkEntry):
+                widget.select_range(0, "end")
+            return "break"
+
+        def on_key_press(event):
+            is_mac = sys.platform == "darwin"
+            # Tkinter state masks for modifier keys:
+            # Control = 4, Command (on Mac) = 8, Shift = 1
+            modifier_pressed = (is_mac and (event.state & 8)) or (
+                not is_mac and (event.state & 4)
+            )
+
+            if modifier_pressed:
+                key = event.keysym.lower()
+                if key == "v":
+                    return do_paste()
+                elif key == "c":
+                    return do_copy()
+                elif key == "x":
+                    return do_cut()
+                elif key == "a":
+                    return do_select_all()
+
+        widget.bind("<KeyPress>", on_key_press, add="+")
 
     def toggle_proxy_entry(self):
         state = "normal" if self.use_proxy_check.get() else "disabled"
@@ -334,6 +382,7 @@ class JinaMDProcessor(ctk.CTk):
 
     def update_status(self, message):
         self.status_bar.configure(text=message)
+
 
 if __name__ == "__main__":
     app = JinaMDProcessor()
