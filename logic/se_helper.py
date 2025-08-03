@@ -4,6 +4,8 @@ This module is intended to house the logic for converting SE numbers to URLs.
 
 import mysql.connector
 
+from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
+
 
 def get_urls_from_se_numbers(se_numbers: list[str]) -> list[dict]:
     """
@@ -11,12 +13,16 @@ def get_urls_from_se_numbers(se_numbers: list[str]) -> list[dict]:
     Each dictionary should contain 'url' and 'source_id'.
     """
     db_params = {
-        "host": "34.141.182.154",
-        "port": "4000",
-        "database": "casafari",
-        "user": "nikita.dyachkov",
-        "password": "jUv6IXpXQN2mT5n6AT93",
+        "host": DB_HOST,
+        "port": DB_PORT,
+        "database": DB_NAME,
+        "user": DB_USER,
+        "password": DB_PASSWORD,
     }
+    if not all(db_params.values()):
+        raise ValueError(
+            "Database configuration is incomplete. Please check your .env file for DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASSWORD."
+        )
     results = []
     conn = None
     try:

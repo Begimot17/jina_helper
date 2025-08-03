@@ -1,5 +1,4 @@
 import os
-import time
 from datetime import datetime
 
 import openpyxl
@@ -7,6 +6,7 @@ import requests
 import undetected_chromedriver as uc
 from g4f.client import Client
 from markdownify import markdownify as md
+from selenium.common.exceptions import WebDriverException
 
 DATA_DIR = "data/results"
 
@@ -19,11 +19,12 @@ def save_to_excel(
     source_estate_id=None,
     domain=None,
 ):
-    """Saves the provided data to a timestamped Excel file in the data/results directory."""
+    """Saves the provided data to a daily Excel file in the data/results directory."""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        excel_file = os.path.join(DATA_DIR, f"{timestamp}.xlsx")
+        # Use a daily file to group results from the same day.
+        timestamp = datetime.now().strftime("%Y-%m-%d")
+        excel_file = os.path.join(DATA_DIR, f"results_{timestamp}.xlsx")
 
         write_header = not os.path.exists(excel_file)
 
@@ -37,7 +38,6 @@ def save_to_excel(
                     "Source Estate ID",
                     "Source ID",
                     "URL",
-                    # "Raw Markdown",
                     "Processed Content",
                 ]
             )
@@ -51,14 +51,50 @@ def save_to_excel(
                 source_estate_id,
                 source_id,
                 url,
-                # md_content,
                 processed_content,
             ]
         )
         workbook.save(excel_file)
-        return True, f"Saved to {excel_file}"
-    except Exception as e:
+        return True, f"Saved to {os.path.basename(excel_file)}"
+    except (IOError, openpyxl.utils.exceptions.InvalidFileException) as e:
         return False, f"Failed to save to Excel: {e}"
+    except Exception as e:
+        return False, f"An unexpected error occurred while saving to Excel: {e}"
+
+
+def _process_and_save_markdown(
+    md_content,
+    listing_url,
+    ui_queue,
+    user_prompt_template,
+    system_prompt_text,
+    save_excel,
+    source_id,
+    source_estate_id,
+    domain,
+    success_message_prefix,
+):
+    """Helper to process MD, update UI, and save results."""
+    ui_queue.put(("update_text", ("raw", md_content)))
+
+    processed_text = process_md(md_content, user_prompt_template, system_prompt_text)
+    ui_queue.put(("update_text", ("processed", processed_text)))
+
+    status_message = success_message_prefix
+    if save_excel:
+        success, message = save_to_excel(
+            listing_url,
+            md_content,
+            processed_text,
+            source_id,
+            source_estate_id,
+            domain,
+        )
+        status_message += f" | {message}"
+        if not success:
+            ui_queue.put(("error", message))
+
+    ui_queue.put(("update_status", status_message))
 
 
 def fetch_md(
@@ -76,7 +112,6 @@ def fetch_md(
 ):
     if not listing_url:
         ui_queue.put(("error", "Please enter a listing URL"))
-        ui_queue.put(("enable_button", True))
         return
 
     try:
@@ -94,29 +129,18 @@ def fetch_md(
 
         if response.status_code == 200:
             md_content = response.text
-            ui_queue.put(("update_text", ("raw", md_content)))
-
-            processed_text = process_md(
-                md_content, user_prompt_template, system_prompt_text
+            _process_and_save_markdown(
+                md_content,
+                listing_url,
+                ui_queue,
+                user_prompt_template,
+                system_prompt_text,
+                save_excel,
+                source_id,
+                source_estate_id,
+                domain,
+                "Completed successfully",
             )
-            ui_queue.put(("update_text", ("processed", processed_text)))
-
-            status_message = "Completed successfully"
-            if save_excel:
-                success, message = save_to_excel(
-                    listing_url,
-                    md_content,
-                    processed_text,
-                    source_id,
-                    source_estate_id,
-                    domain,
-                )
-                status_message += f" | {message}"
-                if not success:
-                    ui_queue.put(("error", message))
-
-            ui_queue.put(("update_status", status_message))
-
         else:
             error_msg = f"API Error {response.status_code}: {response.text}"
             ui_queue.put(("error", error_msg))
@@ -126,8 +150,6 @@ def fetch_md(
         error_msg = f"Request failed: {str(e)}"
         ui_queue.put(("error", error_msg))
         ui_queue.put(("update_text", ("raw", error_msg)))
-    finally:
-        ui_queue.put(("enable_button", True))
 
 
 def fetch_md_selenium(
@@ -145,7 +167,6 @@ def fetch_md_selenium(
 ):
     if not listing_url:
         ui_queue.put(("error", "Please enter a listing URL"))
-        ui_queue.put(("enable_button", True))
         return
 
     driver = None
@@ -159,42 +180,33 @@ def fetch_md_selenium(
 
         driver = uc.Chrome(options=chrome_options, use_subprocess=True)
         driver.get(listing_url)
-        time.sleep(5)
+        # A simple wait for elements to appear.
+        # For more complex pages, explicit waits (WebDriverWait) are more robust.
+        driver.implicitly_wait(5)
 
         html_content = driver.page_source
         md_content = md(html_content)
 
-        ui_queue.put(("update_text", ("raw", md_content)))
-
-        processed_text = process_md(
-            md_content, user_prompt_template, system_prompt_text
+        _process_and_save_markdown(
+            md_content,
+            listing_url,
+            ui_queue,
+            user_prompt_template,
+            system_prompt_text,
+            save_excel,
+            source_id,
+            source_estate_id,
+            domain,
+            "Completed successfully via Selenium",
         )
-        ui_queue.put(("update_text", ("processed", processed_text)))
 
-        status_message = "Completed successfully via Selenium"
-        if save_excel:
-            success, message = save_to_excel(
-                listing_url,
-                md_content,
-                processed_text,
-                source_id,
-                source_estate_id,
-                domain,
-            )
-            status_message += f" | {message}"
-            if not success:
-                ui_queue.put(("error", message))
-
-        ui_queue.put(("update_status", status_message))
-
-    except Exception as e:
+    except (WebDriverException, Exception) as e:
         error_msg = f"Selenium failed: {str(e)}"
         ui_queue.put(("error", error_msg))
         ui_queue.put(("update_text", ("raw", error_msg)))
     finally:
         if driver:
             driver.quit()
-        ui_queue.put(("enable_button", True))
 
 
 def process_md(raw_md, user_prompt_template, system_prompt_text):

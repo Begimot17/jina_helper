@@ -1,7 +1,6 @@
 import os
 import sys
 
-import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,21 +8,17 @@ load_dotenv()
 JINA_API_KEY = os.getenv("JINA_API_KEY")
 PROXY_URL = os.getenv("PROXY_URL")
 
-
-def load_prompts():
-    """Загружает промпты из YAML файла"""
-    try:
-        with open("prompts.yaml", "r", encoding="utf-8") as f:
-            prompts = yaml.safe_load(f)
-            return prompts.get("system_prompt", ""), prompts.get("user_prompt", "")
-    except Exception as e:
-        print(f"Warning: Failed to load prompts: {str(e)}")
-        # Значения по умолчанию
-        return "You are a helpful assistant.", "Please analyze this content:\n{content}"
-
+# Database credentials
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 if not JINA_API_KEY:
     print("Error: JINA_API_KEY not found in .env file")
     sys.exit(1)
 
-DEFAULT_SYSTEM_PROMPT, USER_PROMPT_TEMPLATE = load_prompts()
+# The user prompt template. The {content} placeholder will be filled with the markdown.
+# This is used by the processing functions.
+USER_PROMPT_TEMPLATE = "Please analyze this content:\n{content}"

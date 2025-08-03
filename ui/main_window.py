@@ -4,6 +4,7 @@ import threading
 from tkinter import messagebox
 
 import customtkinter as ctk
+import mysql.connector
 import yaml
 
 from config import JINA_API_KEY, PROXY_URL, USER_PROMPT_TEMPLATE
@@ -283,7 +284,13 @@ class JinaMDProcessor(ctk.CTk):
                     )
                     self.process_btn.configure(state="normal")
                     return
-            except Exception as e:
+            except mysql.connector.Error as e:
+                messagebox.showerror(
+                    "Database Error", f"Failed to get URLs from SE numbers: {e}"
+                )
+                self.process_btn.configure(state="normal")
+                return
+            except (ValueError, Exception) as e:
                 messagebox.showerror(
                     "SE Helper Error", f"Failed to get URLs from SE numbers: {e}"
                 )
