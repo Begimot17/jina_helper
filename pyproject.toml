@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "jina-helper"
+version = "0.1.0"
+description = "A helper tool for processing markdown with Jina AI"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+PyYAML = "^6.0"
+beautifulsoup4 = "^4.12.2"
+python-dotenv = "^1.1.1"
+markdownify = "^1.1.0"
+requests = "^2.32.4"
+customtkinter = "^5.2.2"
+g4f = "^0.5.8.0"
+blinker = "1.5"
+ruff = "^0.12.7"
+pylint = "^3.3.7"
+isort = "^6.0.1"
+undetected-chromedriver = "^3.5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

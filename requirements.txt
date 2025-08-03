@@ -1,6 +1,0 @@
-PyQt5==5.15.9
-yaml
-python-dotenv==1.0.0
-requests==2.31.0
-g4f[all]
-pyinstaller==6.2.0  # Опционально, только для сборки в exe

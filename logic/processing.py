@@ -1,5 +1,9 @@
+import time
+
 import requests
+import undetected_chromedriver as uc
 from g4f.client import Client
+from markdownify import markdownify as md
 
 
 def fetch_md(
@@ -7,18 +11,13 @@ def fetch_md(
     api_key,
     use_proxy,
     proxy_url,
-    signal_emitter,
+    ui_queue,
     user_prompt_template,
     system_prompt_text,
 ):
-    """
-    Fetches Markdown content from a URL, processes it, and emits signals to update the UI.
-    """
     if not listing_url:
-        signal_emitter.update_status_signal.emit(
-            "Error: Please enter listing URL", True
-        )
-        signal_emitter.enable_button_signal.emit(True)
+        ui_queue.put(("error", "Please enter a listing URL"))
+        ui_queue.put(("enable_button", True))
         return
 
     try:
@@ -29,46 +28,84 @@ def fetch_md(
 
         if use_proxy and proxy_url:
             headers["X-Proxy-Url"] = proxy_url
-            headers["X-Proxy"] = "auto"
 
         response = requests.get(
-            f"https://r.jina.ai/{listing_url}",
-            headers=headers,
-            timeout=30,
-            verify=False,  # Consider security implications
+            f"https://r.jina.ai/{listing_url}", headers=headers, timeout=30
         )
 
         if response.status_code == 200:
             md_content = response.text
-            signal_emitter.update_text_signal.emit(md_content, "raw")
+            ui_queue.put(("update_text", ("raw", md_content)))
 
             processed_text = process_md(
                 md_content, user_prompt_template, system_prompt_text
             )
-            signal_emitter.update_text_signal.emit(processed_text, "processed")
-
-            signal_emitter.update_status_signal.emit("Completed successfully", False)
+            ui_queue.put(("update_text", ("processed", processed_text)))
+            ui_queue.put(("update_status", "Completed successfully"))
         else:
             error_msg = f"API Error {response.status_code}: {response.text}"
-            signal_emitter.update_status_signal.emit(error_msg, True)
-            signal_emitter.update_text_signal.emit(error_msg, "raw")
+            ui_queue.put(("error", error_msg))
+            ui_queue.put(("update_text", ("raw", error_msg)))
 
     except requests.exceptions.RequestException as e:
         error_msg = f"Request failed: {str(e)}"
-        signal_emitter.update_status_signal.emit(error_msg, True)
-        signal_emitter.update_text_signal.emit(error_msg, "raw")
+        ui_queue.put(("error", error_msg))
+        ui_queue.put(("update_text", ("raw", error_msg)))
     finally:
-        signal_emitter.enable_button_signal.emit(True)
+        ui_queue.put(("enable_button", True))
+
+
+def fetch_md_selenium(
+    listing_url,
+    api_key,
+    use_proxy,
+    proxy_url,
+    ui_queue,
+    user_prompt_template,
+    system_prompt_text,
+):
+    if not listing_url:
+        ui_queue.put(("error", "Please enter a listing URL"))
+        ui_queue.put(("enable_button", True))
+        return
+
+    driver = None
+    try:
+        chrome_options = uc.ChromeOptions()
+        # chrome_options.add_argument('--headless')
+        chrome_options.add_argument("--disable-gpu")
+
+        if use_proxy and proxy_url:
+            chrome_options.add_argument(f"--proxy-server={proxy_url}")
+
+        driver = uc.Chrome(options=chrome_options, use_subprocess=True)
+        driver.get(listing_url)
+        time.sleep(5)  # Wait for the page to load dynamically
+
+        html_content = driver.page_source
+        md_content = md(html_content)
+
+        ui_queue.put(("update_text", ("raw", md_content)))
+
+        processed_text = process_md(
+            md_content, user_prompt_template, system_prompt_text
+        )
+        ui_queue.put(("update_text", ("processed", processed_text)))
+        ui_queue.put(("update_status", "Completed successfully via Selenium"))
+
+    except Exception as e:
+        error_msg = f"Selenium failed: {str(e)}"
+        ui_queue.put(("error", error_msg))
+        ui_queue.put(("update_text", ("raw", error_msg)))
+    finally:
+        if driver:
+            driver.quit()
+        ui_queue.put(("enable_button", True))
 
 
 def process_md(raw_md, user_prompt_template, system_prompt_text):
-    """
-    Processes the raw Markdown content using an AI model.
-    """
     client = Client()
     system_prompt = system_prompt_text.strip()
-
-    # Форматируем пользовательский промпт с подстановкой контента
     user_prompt = user_prompt_template.format(content=raw_md)
 
     messages = [
