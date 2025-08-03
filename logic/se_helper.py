@@ -5,9 +5,10 @@ This module is intended to house the logic for converting SE numbers to URLs.
 import mysql.connector
 
 from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
+from logic.models import Task
 
 
-def get_urls_from_se_numbers(se_numbers: list[str]) -> list[dict]:
+def get_tasks_from_se_numbers(se_numbers: list[str]) -> list[Task]:
     """
     Takes a list of SE numbers and returns a list of dictionaries.
     Each dictionary should contain 'url' and 'source_id'.
@@ -37,37 +38,39 @@ def get_urls_from_se_numbers(se_numbers: list[str]) -> list[dict]:
 
         # Create a string of placeholders (%s, %s, %s)
         placeholders = ", ".join(["%s"] * len(se_numbers_stripped))
+        # Fetch domain name along with other details. Use LEFT JOIN to be robust.
         query = f"""
-                SELECT id, source_id, url
-                FROM source_estates
-                WHERE id IN ({placeholders})
-                """
-        # query = f"""
-        # SELECT
-        #     se.id,
-        #     se.source_id,
-        #     se.url,
-        #     s.name AS domain
-        # FROM source_estates se
-        # JOIN sources s ON se.source_id = s.id
-        # WHERE se.id IN ({placeholders})"""
+                        SELECT id, source_id, url
+                        FROM source_estates
+                        WHERE id IN ({placeholders})
+                        """
+        # query_and_domain = f"""
+        #         SELECT
+        #             se.id,
+        #             se.source_id,
+        #             se.url,
+        #             s.name AS domain
+        #         FROM source_estates se
+        #         LEFT JOIN sources s ON se.source_id = s.id
+        #         WHERE se.id IN ({placeholders})
+        #         """
 
         cur.execute(query, se_numbers_stripped)
         rows = cur.fetchall()
 
         for row in rows:
             results.append(
-                {
-                    "source_estate_id": row[0],
-                    "source_id": row[1],
-                    "url": row[2],
-                    "domain": None,
-                }
+                Task(
+                    source_estate_id=row[0],
+                    source_id=row[1],
+                    url=row[2],
+                    # domain=row[3],
+                )
             )
 
         cur.close()
-    except mysql.connector.Error as e:
-        print(f"Database error: {e}")
+    except mysql.connector.Error:
+        raise  # Re-raise the exception to be handled by the UI layer
     finally:
         if conn is not None and conn.is_connected():
             conn.close()

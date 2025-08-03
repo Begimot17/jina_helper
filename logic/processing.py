@@ -8,22 +8,24 @@ from g4f.client import Client
 from markdownify import markdownify as md
 from selenium.common.exceptions import WebDriverException
 
+from logic.models import ProcessingContext, Task
+
 DATA_DIR = "data/results"
+
+# Instantiate the client once at the module level for reuse and performance.
+g4f_client = Client()
 
 
 def save_to_excel(
-    url,
+    task: Task,
     md_content,
     processed_content,
-    source_id=None,
-    source_estate_id=None,
-    domain=None,
 ):
     """Saves the provided data to a daily Excel file in the data/results directory."""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         # Use a daily file to group results from the same day.
-        timestamp = datetime.now().strftime("%Y-%m-%d")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
         excel_file = os.path.join(DATA_DIR, f"results_{timestamp}.xlsx")
 
         write_header = not os.path.exists(excel_file)
@@ -47,10 +49,10 @@ def save_to_excel(
 
         sheet.append(
             [
-                domain,
-                source_estate_id,
-                source_id,
-                url,
+                task.domain,
+                task.source_estate_id,
+                task.source_id,
+                task.url,
                 processed_content,
             ]
         )
@@ -63,110 +65,68 @@ def save_to_excel(
 
 
 def _process_and_save_markdown(
-    md_content,
-    listing_url,
-    ui_queue,
-    user_prompt_template,
-    system_prompt_text,
-    save_excel,
-    source_id,
-    source_estate_id,
-    domain,
-    success_message_prefix,
+    md_content: str,
+    task: Task,
+    context: ProcessingContext,
+    success_message_prefix: str,
 ):
     """Helper to process MD, update UI, and save results."""
-    ui_queue.put(("update_text", ("raw", md_content)))
+    context.ui_queue.put(("update_text", ("raw", md_content)))
 
-    processed_text = process_md(md_content, user_prompt_template, system_prompt_text)
-    ui_queue.put(("update_text", ("processed", processed_text)))
+    processed_text = process_md(
+        md_content, context.user_prompt_template, context.system_prompt_text
+    )
+    context.ui_queue.put(("update_text", ("processed", processed_text)))
 
     status_message = success_message_prefix
-    if save_excel:
-        success, message = save_to_excel(
-            listing_url,
-            md_content,
-            processed_text,
-            source_id,
-            source_estate_id,
-            domain,
-        )
+    if context.save_excel:
+        success, message = save_to_excel(task, md_content, processed_text)
         status_message += f" | {message}"
         if not success:
-            ui_queue.put(("error", message))
+            context.ui_queue.put(("error", message))
 
-    ui_queue.put(("update_status", status_message))
+    context.ui_queue.put(("update_status", status_message))
 
 
-def fetch_md(
-    listing_url,
-    api_key,
-    use_proxy,
-    proxy_url,
-    ui_queue,
-    user_prompt_template,
-    system_prompt_text,
-    save_excel,
-    source_id=None,
-    source_estate_id=None,
-    domain=None,
-):
-    if not listing_url:
-        ui_queue.put(("error", "Please enter a listing URL"))
+def fetch_md(task: Task, context: ProcessingContext):
+    """Fetches markdown content using the Jina Reader API."""
+    if not task.url:
+        context.ui_queue.put(("error", "Encountered a task with no URL."))
         return
 
     try:
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {context.api_key}",
             "Content-Type": "application/json",
         }
 
-        if use_proxy and proxy_url:
-            headers["X-Proxy-Url"] = proxy_url
+        if context.use_proxy and context.proxy_url:
+            headers["X-Proxy-Url"] = context.proxy_url
 
         response = requests.get(
-            f"https://r.jina.ai/{listing_url}", headers=headers, timeout=30
+            f"https://r.jina.ai/{task.url}", headers=headers, timeout=30
         )
 
         if response.status_code == 200:
             md_content = response.text
             _process_and_save_markdown(
-                md_content,
-                listing_url,
-                ui_queue,
-                user_prompt_template,
-                system_prompt_text,
-                save_excel,
-                source_id,
-                source_estate_id,
-                domain,
-                "Completed successfully",
+                md_content, task, context, "Completed successfully"
             )
         else:
             error_msg = f"API Error {response.status_code}: {response.text}"
-            ui_queue.put(("error", error_msg))
-            ui_queue.put(("update_text", ("raw", error_msg)))
+            context.ui_queue.put(("error", error_msg))
+            context.ui_queue.put(("update_text", ("raw", error_msg)))
 
     except requests.exceptions.RequestException as e:
         error_msg = f"Request failed: {str(e)}"
-        ui_queue.put(("error", error_msg))
-        ui_queue.put(("update_text", ("raw", error_msg)))
+        context.ui_queue.put(("error", error_msg))
+        context.ui_queue.put(("update_text", ("raw", error_msg)))
 
 
-def fetch_md_selenium(
-    listing_url,
-    api_key,
-    use_proxy,
-    proxy_url,
-    ui_queue,
-    user_prompt_template,
-    system_prompt_text,
-    save_excel,
-    source_id=None,
-    source_estate_id=None,
-    domain=None,
-):
-    if not listing_url:
-        ui_queue.put(("error", "Please enter a listing URL"))
+def fetch_md_selenium(task: Task, context: ProcessingContext):
+    """Fetches HTML content using Selenium and converts it to markdown."""
+    if not task.url:
+        context.ui_queue.put(("error", "Encountered a task with no URL."))
         return
 
     driver = None
@@ -175,11 +135,11 @@ def fetch_md_selenium(
         # chrome_options.add_argument('''--headless''')
         chrome_options.add_argument("--disable-gpu")
 
-        if use_proxy and proxy_url:
-            chrome_options.add_argument(f"--proxy-server={proxy_url}")
+        if context.use_proxy and context.proxy_url:
+            chrome_options.add_argument(f"--proxy-server={context.proxy_url}")
 
         driver = uc.Chrome(options=chrome_options, use_subprocess=True)
-        driver.get(listing_url)
+        driver.get(task.url)
         # A simple wait for elements to appear.
         # For more complex pages, explicit waits (WebDriverWait) are more robust.
         driver.implicitly_wait(5)
@@ -189,28 +149,21 @@ def fetch_md_selenium(
 
         _process_and_save_markdown(
             md_content,
-            listing_url,
-            ui_queue,
-            user_prompt_template,
-            system_prompt_text,
-            save_excel,
-            source_id,
-            source_estate_id,
-            domain,
+            task,
+            context,
             "Completed successfully via Selenium",
         )
 
     except (WebDriverException, Exception) as e:
         error_msg = f"Selenium failed: {str(e)}"
-        ui_queue.put(("error", error_msg))
-        ui_queue.put(("update_text", ("raw", error_msg)))
+        context.ui_queue.put(("error", error_msg))
+        context.ui_queue.put(("update_text", ("raw", error_msg)))
     finally:
         if driver:
             driver.quit()
 
 
 def process_md(raw_md, user_prompt_template, system_prompt_text):
-    client = Client()
     system_prompt = system_prompt_text.strip()
     user_prompt = user_prompt_template.format(content=raw_md)
 
@@ -219,7 +172,7 @@ def process_md(raw_md, user_prompt_template, system_prompt_text):
         {"role": "user", "content": user_prompt},
     ]
 
-    response = client.chat.completions.create(
+    response = g4f_client.chat.completions.create(
         model="gpt-4o-mini", messages=messages, web_search=False
     )
     return response.choices[0].message.content

@@ -8,8 +8,9 @@ import mysql.connector
 import yaml
 
 from config import JINA_API_KEY, PROXY_URL, USER_PROMPT_TEMPLATE
+from logic.models import ProcessingContext, Task
 from logic.processing import fetch_md, fetch_md_selenium
-from logic.se_helper import get_urls_from_se_numbers
+from logic.se_helper import get_tasks_from_se_numbers
 
 
 class JinaMDProcessor(ctk.CTk):
@@ -277,7 +278,7 @@ class JinaMDProcessor(ctk.CTk):
         if self.is_se_check.get():
             try:
                 self.update_status("Converting SE numbers to URLs...")
-                tasks = get_urls_from_se_numbers(inputs)
+                tasks = get_tasks_from_se_numbers(inputs)
                 if not tasks:
                     messagebox.showerror(
                         "Error", "Could not convert any SE numbers to URLs."
@@ -297,72 +298,54 @@ class JinaMDProcessor(ctk.CTk):
                 self.process_btn.configure(state="normal")
                 return
         else:
-            tasks = [
-                {"url": url, "source_id": None, "source_estate_id": None}
-                for url in inputs
-            ]
+            tasks = [Task(url=url) for url in inputs]
 
         self.active_threads = len(tasks)
         self.update_status(f"Processing {self.active_threads} items...")
 
         use_selenium = bool(self.use_selenium_check.get())
-        save_to_excel = bool(self.save_to_excel_check.get())
+
+        context = ProcessingContext(
+            api_key=self.api_key,
+            use_proxy=bool(self.use_proxy_check.get()),
+            proxy_url=self.proxy_entry.get().strip(),
+            ui_queue=self.ui_queue,
+            user_prompt_template=self.user_prompt_template,
+            system_prompt_text=self.system_prompt_edit.get("1.0", "end-1c"),
+            save_excel=bool(self.save_to_excel_check.get()),
+        )
 
         if use_selenium:
             thread = threading.Thread(
-                target=self._run_selenium_task, args=(tasks, save_to_excel), daemon=True
+                target=self._run_selenium_tasks, args=(tasks, context), daemon=True
             )
             thread.start()
         else:
             for task in tasks:
                 thread = threading.Thread(
                     target=self._run_fetch_task,
-                    args=(fetch_md, task, save_to_excel),
+                    args=(task, context),
                     daemon=True,
                 )
                 thread.start()
 
-    def _run_fetch_task(self, target_func, task_info, save_to_excel):
+    def _run_fetch_task(self, task: Task, context: ProcessingContext):
         try:
-            target_func(
-                listing_url=task_info["url"],
-                api_key=self.api_key,
-                use_proxy=bool(self.use_proxy_check.get()),
-                proxy_url=self.proxy_entry.get().strip(),
-                ui_queue=self.ui_queue,
-                user_prompt_template=self.user_prompt_template,
-                system_prompt_text=self.system_prompt_edit.get("1.0", "end-1c"),
-                save_excel=save_to_excel,
-                source_id=task_info.get("source_id"),
-                source_estate_id=task_info.get("source_estate_id"),
-                domain=task_info.get("domain"),
-            )
+            fetch_md(task, context)
         finally:
             with self.lock:
                 self.active_threads -= 1
 
-    def _run_selenium_task(self, tasks, save_to_excel):
+    def _run_selenium_tasks(self, tasks: list[Task], context: ProcessingContext):
         try:
-            for i, task_info in enumerate(tasks):
+            for i, task in enumerate(tasks):
                 self.ui_queue.put(
                     (
                         "update_status",
-                        f"[Selenium] Processing {i + 1}/{len(tasks)}: {task_info['url']}",
+                        f"[Selenium] Processing {i + 1}/{len(tasks)}: {task.url}",
                     )
                 )
-                fetch_md_selenium(
-                    listing_url=task_info["url"],
-                    api_key=self.api_key,
-                    use_proxy=bool(self.use_proxy_check.get()),
-                    proxy_url=self.proxy_entry.get().strip(),
-                    ui_queue=self.ui_queue,
-                    user_prompt_template=self.user_prompt_template,
-                    system_prompt_text=self.system_prompt_edit.get("1.0", "end-1c"),
-                    save_excel=save_to_excel,
-                    source_id=task_info.get("source_id"),
-                    source_estate_id=task_info.get("source_estate_id"),
-                    domain=task_info.get("domain"),
-                )
+                fetch_md_selenium(task, context)
         finally:
             with self.lock:
                 self.active_threads = 0
