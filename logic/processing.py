@@ -102,6 +102,7 @@ def fetch_md(task: Task, context: ProcessingContext):
 
         if context.use_proxy and context.proxy_url:
             headers["X-Proxy-Url"] = context.proxy_url
+            headers["X-Exclude-Selector"] = 'header, footer, nav, aside, script, style, noscript,.header,.footer,.nav,.menu,.sidebar,.ads,.advertisement,.social,.breadcrumbs,.comments,.related,.popup,.subscribe,.newsletter,.cookie,.btn,.icon,.image,.photo,.gallery,.share'
 
         response = requests.get(
             f"https://r.jina.ai/{task.url}", headers=headers, timeout=30
