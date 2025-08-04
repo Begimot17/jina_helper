@@ -25,7 +25,7 @@ def save_to_excel(
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         # Use a daily file to group results from the same day.
-        timestamp = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d")
         excel_file = os.path.join(DATA_DIR, f"results_{timestamp}.xlsx")
 
         write_header = not os.path.exists(excel_file)
