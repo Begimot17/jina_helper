@@ -12,6 +12,20 @@ from logic.models import ProcessingContext, Task
 
 DATA_DIR = "data/results"
 
+# List of CSS selectors for elements to be removed from the page content.
+# This helps in isolating the main article/text from headers, footers, ads, etc.
+SELECTORS_TO_REMOVE = (
+    "a, img, script, style, svg, iframe, video, audio, button, form,"
+    "input, select, option, textarea, canvas, noscript, link, meta,"
+    "footer, header, nav, aside, figure, figcaption, picture, source,"
+    "object, embed, blockquote, cite, code, pre, table, thead, tbody,"
+    "tfoot, tr, td, th, hr, br, b, i, u, em, sup,"
+    "sub, label, fieldset, legend, time, mark, details, summary, del,"
+    "ins, .header, .footer, .nav, .menu, .sidebar, .ads, .advertisement,"
+    ".social, .breadcrumbs, .comments, .related, .popup, .subscribe,"
+    ".newsletter, .cookie, .btn, .icon, .image, .photo, .gallery, .share"
+)
+
 # Instantiate the client once at the module level for reuse and performance.
 g4f_client = Client()
 
@@ -98,11 +112,11 @@ def fetch_md(task: Task, context: ProcessingContext):
         headers = {
             "Authorization": f"Bearer {context.api_key}",
             "Content-Type": "application/json",
+            "X-Exclude-Selector": SELECTORS_TO_REMOVE,
         }
 
         if context.use_proxy and context.proxy_url:
             headers["X-Proxy-Url"] = context.proxy_url
-            headers["X-Exclude-Selector"] = 'header, footer, nav, aside, script, style, noscript,.header,.footer,.nav,.menu,.sidebar,.ads,.advertisement,.social,.breadcrumbs,.comments,.related,.popup,.subscribe,.newsletter,.cookie,.btn,.icon,.image,.photo,.gallery,.share'
 
         response = requests.get(
             f"https://r.jina.ai/{task.url}", headers=headers, timeout=30
@@ -145,8 +159,26 @@ def fetch_md_selenium(task: Task, context: ProcessingContext):
         # For more complex pages, explicit waits (WebDriverWait) are more robust.
         driver.implicitly_wait(5)
 
+        # JavaScript to remove elements matching the selectors.
+        # This helps in cleaning the HTML before converting to Markdown.
+        js_remover_script = """
+        const selectors = arguments[0].split(',');
+        for (const selector of selectors) {
+            try {
+                document.querySelectorAll(selector.trim()).forEach(el => el.remove());
+            } catch (e) {
+                // Silently ignore errors for invalid selectors
+            }
+        }
+        """
+        driver.execute_script(js_remover_script, SELECTORS_TO_REMOVE)
+
         html_content = driver.page_source
-        md_content = md(html_content)
+        # The JS removal is very aggressive. As a fallback, we also strip key
+        # tags during the markdown conversion to ensure a clean result.
+        md_content = md(
+            html_content, strip=["a", "img", "script", "style", "svg", "button"]
+        )
 
         _process_and_save_markdown(
             md_content,
