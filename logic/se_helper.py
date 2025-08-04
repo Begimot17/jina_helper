@@ -40,7 +40,7 @@ def get_tasks_from_se_numbers(se_numbers: list[str]) -> list[Task]:
         placeholders = ", ".join(["%s"] * len(se_numbers_stripped))
         # Fetch domain name along with other details. Use LEFT JOIN to be robust.
         query = f"""
-                        SELECT id, source_id, url
+                        SELECT id, source_id, url, status, rent_status, subtype
                         FROM source_estates
                         WHERE id IN ({placeholders})
                         """
@@ -64,6 +64,9 @@ def get_tasks_from_se_numbers(se_numbers: list[str]) -> list[Task]:
                     source_estate_id=row[0],
                     source_id=row[1],
                     url=row[2],
+                    status=row[3],
+                    rent_status=row[4],
+                    subtype=row[5],
                     # domain=row[3],
                 )
             )

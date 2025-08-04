@@ -12,18 +12,12 @@ from logic.models import ProcessingContext, Task
 
 DATA_DIR = "data/results"
 
-# List of CSS selectors for elements to be removed from the page content.
-# This helps in isolating the main article/text from headers, footers, ads, etc.
 SELECTORS_TO_REMOVE = (
-    "a, img, script, style, svg, iframe, video, audio, button, form,"
-    "input, select, option, textarea, canvas, noscript, link, meta,"
-    "footer, header, nav, aside, figure, figcaption, picture, source,"
-    "object, embed, blockquote, cite, code, pre, table, thead, tbody,"
-    "tfoot, tr, td, th, hr, br, b, i, u, em, sup,"
-    "sub, label, fieldset, legend, time, mark, details, summary, del,"
-    "ins, .header, .footer, .nav, .menu, .sidebar, .ads, .advertisement,"
+    "script, style, noscript, iframe, header, footer, nav, aside,"
+    ".header, .footer, .nav, .menu, .sidebar, .ads, .advertisement,"
     ".social, .breadcrumbs, .comments, .related, .popup, .subscribe,"
-    ".newsletter, .cookie, .btn, .icon, .image, .photo, .gallery, .share"
+    ".newsletter, .cookie, .cookie-banner, .modal, #comments, #footer, #header"
+    "img, picture, a"
 )
 
 # Instantiate the client once at the module level for reuse and performance.
@@ -54,6 +48,9 @@ def save_to_excel(
                     "Source Estate ID",
                     "Source ID",
                     "URL",
+                    "Status",
+                    "Rent Status",
+                    "Subtype",
                     "Processed Content",
                 ]
             )
@@ -67,6 +64,9 @@ def save_to_excel(
                 task.source_estate_id,
                 task.source_id,
                 task.url,
+                task.status,
+                task.rent_status,
+                task.subtype,
                 processed_content,
             ]
         )
@@ -112,7 +112,7 @@ def fetch_md(task: Task, context: ProcessingContext):
         headers = {
             "Authorization": f"Bearer {context.api_key}",
             "Content-Type": "application/json",
-            "X-Exclude-Selector": SELECTORS_TO_REMOVE,
+            "X-Exclude-Selector": ",".join(SELECTORS_TO_REMOVE),
         }
 
         if context.use_proxy and context.proxy_url:
@@ -171,17 +171,20 @@ def fetch_md_selenium(task: Task, context: ProcessingContext):
             }
         }
         """
-        driver.execute_script(js_remover_script, SELECTORS_TO_REMOVE)
+        driver.execute_script(js_remover_script, ",".join(SELECTORS_TO_REMOVE))
 
         html_content = driver.page_source
-        # The JS removal is very aggressive. As a fallback, we also strip key
-        # tags during the markdown conversion to ensure a clean result.
+
         md_content = md(
             html_content, strip=["a", "img", "script", "style", "svg", "button"]
         )
 
+        # Clean up excessive whitespace and blank lines from the markdown content.
+        lines = [line.strip() for line in md_content.splitlines()]
+        cleaned_md_content = "\n".join(line for line in lines if line)
+
         _process_and_save_markdown(
-            md_content,
+            cleaned_md_content,
             task,
             context,
             "Completed successfully via Selenium",

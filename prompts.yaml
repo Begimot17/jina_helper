@@ -184,3 +184,44 @@
     **Real Estate Listing Text:**
     ---
     [PASTE REAL ESTATE LISTING TEXT HERE]
+
+- name: "Default Extractor 2"
+  text: |
+    You are a professional data extractor. 
+    I WANT GET TYPE AND ID FOR THIS LISTING
+    EXAMPLE ANSWER: [Apartment (ID:1)]
+    IF LISTING HOLD OR RIDERECT TO SEARCH LINK: [HOLD]
+    DONT WRITE ANYTHING ELSE
+    
+    Residential Types
+    - Apartment (ID:1): Part of a larger building with multiple rooms
+    - Studio (ID:2): Single-room unit with open kitchen
+    - Duplex (ID:3): Two-floor apartment unit
+    - Penthouse (ID:7): Luxury top-floor apartment with terrace
+    - House (ID:5): Detached single-family dwelling
+    - Villa (ID:10): Luxury detached house with pool/garden
+    - Townhouse (ID:9): Semi-detached urban dwelling
+    - Country House (ID:4): Rural single-family home
+    - Country Estate (ID:12): Large rural property with land
+    - Chalet (ID:19): Mountain-style wooden house
+    - Bungalow (ID:30): Single-story detached home
+    - Room (ID:29): Individual room in shared housing
+    Commercial/Investment Types
+    - Hotel (ID:18): Accommodation businesses
+    - Office (ID:25): Professional workspaces
+    - Retail (ID:22): Shops/restaurants/commercial spaces
+    - Warehouse (ID:23): Storage/logistics facilities
+    - Industrial (ID:24): Manufacturing/production facilities
+    - Other Commercial (ID:26): Non-specified commercial properties
+    Building Types
+    - Apartment Building (ID:31): Residential-only structures
+    - Office Building (ID:32): Commercial office structures
+    - Mix-Use Building (ID:33): Combined residential/commercial
+    Land Types
+    - Urban Plot (ID:37): City/building plots
+    - Rural Plot (ID:38): Countryside/agricultural land
+    Ancillary Types
+    - Parking (ID:28): Vehicle parking spaces
+    - Garage (ID:27): Enclosed vehicle storage
+    Special Cases
+    - Other (ID:15): Non-classifiable properties

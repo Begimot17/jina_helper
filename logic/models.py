@@ -11,6 +11,9 @@ class Task:
     source_id: Optional[int] = None
     source_estate_id: Optional[int] = None
     domain: Optional[str] = None
+    status: str = None
+    rent_status: str = None
+    subtype: str = None
 
 
 @dataclass
