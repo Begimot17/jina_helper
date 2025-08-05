@@ -124,7 +124,7 @@ class JinaMDProcessor(ctk.CTk):
 
         prompts_tab = self.tab_view.tab("Prompts & Controls")
         prompts_tab.grid_columnconfigure(0, weight=1)
-        prompts_tab.grid_rowconfigure(2, weight=1)
+        prompts_tab.grid_rowconfigure(3, weight=1)
 
         self.prompt_selection_frame = ctk.CTkFrame(prompts_tab)
         self.prompt_selection_frame.grid(
@@ -145,15 +145,37 @@ class JinaMDProcessor(ctk.CTk):
         )
         self.prompt_menu.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
+        self.model_selection_frame = ctk.CTkFrame(prompts_tab)
+        self.model_selection_frame.grid(
+            row=1, column=0, padx=10, pady=(5, 0), sticky="ew"
+        )
+        self.model_selection_frame.grid_columnconfigure(1, weight=1)
+
+        self.model_label = ctk.CTkLabel(
+            self.model_selection_frame, text="Select Model:"
+        )
+        self.model_label.grid(row=0, column=0, padx=10, pady=5)
+
+        self.model_menu = ctk.CTkOptionMenu(
+            self.model_selection_frame,
+            values=[
+                "gemini-1.5-flash-latest",
+                "gpt-4o-mini",
+                "claude-3-sonnet-20240229",
+            ],
+        )
+        self.model_menu.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+        self.model_menu.set("gemini-1.5-flash-latest")
+
         self.system_prompt_label = ctk.CTkLabel(prompts_tab, text="System Prompt:")
         self.system_prompt_label.grid(
-            row=1, column=0, padx=10, pady=(10, 0), sticky="w"
+            row=2, column=0, padx=10, pady=(10, 0), sticky="w"
         )
         self.system_prompt_edit = ctk.CTkTextbox(prompts_tab, font=("Consolas", 12))
-        self.system_prompt_edit.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        self.system_prompt_edit.grid(row=3, column=0, padx=10, pady=5, sticky="nsew")
 
         self.controls_frame = ctk.CTkFrame(prompts_tab)
-        self.controls_frame.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
+        self.controls_frame.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
 
         self.reset_prompt_btn = ctk.CTkButton(
             self.controls_frame,
@@ -313,6 +335,7 @@ class JinaMDProcessor(ctk.CTk):
             user_prompt_template=self.user_prompt_template,
             system_prompt_text=self.system_prompt_edit.get("1.0", "end-1c"),
             save_excel=bool(self.save_to_excel_check.get()),
+            model_name=self.model_menu.get(),
         )
 
         if use_selenium:

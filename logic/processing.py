@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 import openpyxl
+import google.generativeai as genai
 import requests
 import undetected_chromedriver as uc
 from g4f.client import Client
@@ -22,6 +23,14 @@ SELECTORS_TO_REMOVE = (
 
 # Instantiate the client once at the module level for reuse and performance.
 g4f_client = Client()
+
+# Configure the Gemini client.
+# It's good practice to configure the API key once at the module level.
+# The user should set the GOOGLE_API_KEY environment variable.
+if "GOOGLE_API_KEY" in os.environ:
+    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+else:
+    print("Warning: GOOGLE_API_KEY environment variable not set. Gemini models will not work.")
 
 
 def save_to_excel(
@@ -51,6 +60,7 @@ def save_to_excel(
                     "Status",
                     "Rent Status",
                     "Subtype",
+                    "Type",
                     "Processed Content",
                 ]
             )
@@ -67,6 +77,7 @@ def save_to_excel(
                 task.status,
                 task.rent_status,
                 task.subtype,
+                task.type,
                 processed_content,
             ]
         )
@@ -88,7 +99,10 @@ def _process_and_save_markdown(
     context.ui_queue.put(("update_text", ("raw", md_content)))
 
     processed_text = process_md(
-        md_content, context.user_prompt_template, context.system_prompt_text
+        md_content,
+        context.user_prompt_template,
+        context.system_prompt_text,
+        context.model_name,
     )
     context.ui_queue.put(("update_text", ("processed", processed_text)))
 
@@ -199,16 +213,34 @@ def fetch_md_selenium(task: Task, context: ProcessingContext):
             driver.quit()
 
 
-def process_md(raw_md, user_prompt_template, system_prompt_text):
-    system_prompt = system_prompt_text.strip()
+def process_md(raw_md, user_prompt_template, system_prompt_text, model_name: str):
     user_prompt = user_prompt_template.format(content=raw_md)
+    system_prompt = system_prompt_text.strip()
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
+    # Logic for Gemini models using the official Google library
+    if model_name.startswith("gemini"):
+        try:
+            if not os.environ.get("GOOGLE_API_KEY"):
+                return "Error: GOOGLE_API_KEY environment variable not set. Please configure it to use Gemini."
 
-    response = g4f_client.chat.completions.create(
-        model="gpt-4o-mini", messages=messages, web_search=False
-    )
-    return response.choices[0].message.content
+            model = genai.GenerativeModel(
+                model_name=model_name, system_instruction=system_prompt
+            )
+            response = model.generate_content(user_prompt)
+            return response.text
+        except Exception as e:
+            return f"An error occurred with the Gemini API: {e}"
+
+    # Existing logic for g4f models (GPT, Claude, etc.)
+    else:
+        try:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            response = g4f_client.chat.completions.create(
+                model=model_name, messages=messages, web_search=False
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"An error occurred with the g4f client: {e}"

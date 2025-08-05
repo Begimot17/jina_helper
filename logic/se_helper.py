@@ -44,18 +44,24 @@ def get_tasks_from_se_numbers(se_numbers: list[str]) -> list[Task]:
                         FROM source_estates
                         WHERE id IN ({placeholders})
                         """
-        # query_and_domain = f"""
-        #         SELECT
-        #             se.id,
-        #             se.source_id,
-        #             se.url,
-        #             s.name AS domain
-        #         FROM source_estates se
-        #         LEFT JOIN sources s ON se.source_id = s.id
-        #         WHERE se.id IN ({placeholders})
-        #         """
+        query_and_domain = f"""
+                SELECT
+                    se.id,
+                    se.source_id,
+                    se.url,
+                    se.status, 
+                    se.rent_status, 
+                    se.subtype,
+                    t.name_en,
+                    se.type_id,
+                    s.name AS domain
+                FROM source_estates se
+                LEFT JOIN sources s ON se.source_id = s.id
+                LEFT JOIN types t ON se.type_id = t.id
+                WHERE se.id IN ({placeholders})
+                """
 
-        cur.execute(query, se_numbers_stripped)
+        cur.execute(query_and_domain, se_numbers_stripped)
         rows = cur.fetchall()
 
         for row in rows:
@@ -67,7 +73,8 @@ def get_tasks_from_se_numbers(se_numbers: list[str]) -> list[Task]:
                     status=row[3],
                     rent_status=row[4],
                     subtype=row[5],
-                    # domain=row[3],
+                    type=f"{row[6]} - Id={row[7]}",
+                    domain=row[8],
                 )
             )
 

@@ -14,6 +14,7 @@ class Task:
     status: str = None
     rent_status: str = None
     subtype: str = None
+    type: str = None
 
 
 @dataclass
@@ -27,3 +28,4 @@ class ProcessingContext:
     user_prompt_template: str
     system_prompt_text: str
     save_excel: bool
+    model_name: str
