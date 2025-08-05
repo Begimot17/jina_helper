@@ -1,7 +1,9 @@
 import queue
 import sys
 import threading
+import uuid
 from tkinter import messagebox
+from datetime import datetime
 
 import customtkinter as ctk
 import mysql.connector
@@ -297,6 +299,8 @@ class JinaMDProcessor(ctk.CTk):
         self.process_btn.configure(state="disabled")
         self.update_status("Starting processing...")
 
+        run_id = datetime.now().strftime(f"%Y%m%d_%H%M%S")
+
         if self.is_se_check.get():
             try:
                 self.update_status("Converting SE numbers to URLs...")
@@ -336,6 +340,7 @@ class JinaMDProcessor(ctk.CTk):
             system_prompt_text=self.system_prompt_edit.get("1.0", "end-1c"),
             save_excel=bool(self.save_to_excel_check.get()),
             model_name=self.model_menu.get(),
+            run_id=run_id,
         )
 
         if use_selenium:

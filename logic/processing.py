@@ -37,13 +37,13 @@ def save_to_excel(
     task: Task,
     md_content,
     processed_content,
+    run_id: str,
 ):
     """Saves the provided data to a daily Excel file in the data/results directory."""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        # Use a daily file to group results from the same day.
-        timestamp = datetime.now().strftime("%Y-%m-%d")
-        excel_file = os.path.join(DATA_DIR, f"results_{timestamp}.xlsx")
+        # Use a unique run ID for the filename.
+        excel_file = os.path.join(DATA_DIR, f"results_{run_id}.xlsx")
 
         write_header = not os.path.exists(excel_file)
 
@@ -108,7 +108,9 @@ def _process_and_save_markdown(
 
     status_message = success_message_prefix
     if context.save_excel:
-        success, message = save_to_excel(task, md_content, processed_text)
+        success, message = save_to_excel(
+            task, md_content, processed_text, context.run_id
+        )
         status_message += f" | {message}"
         if not success:
             context.ui_queue.put(("error", message))

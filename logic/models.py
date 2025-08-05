@@ -29,3 +29,4 @@ class ProcessingContext:
     system_prompt_text: str
     save_excel: bool
     model_name: str
+    run_id: str
