@@ -2,6 +2,8 @@ import os
 from datetime import datetime
 
 import openpyxl
+from openpyxl.styles import Alignment
+from openpyxl.utils import get_column_letter
 import google.generativeai as genai
 import requests
 import undetected_chromedriver as uc
@@ -42,7 +44,6 @@ def save_to_excel(
     """Saves the provided data to a daily Excel file in the data/results directory."""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        # Use a unique run ID for the filename.
         excel_file = os.path.join(DATA_DIR, f"results_{run_id}.xlsx")
 
         write_header = not os.path.exists(excel_file)
@@ -51,36 +52,45 @@ def save_to_excel(
             workbook = openpyxl.Workbook()
             sheet = workbook.active
             sheet.title = "Processed Data"
-            sheet.append(
-                [
-                    "Domain",
-                    "Source Estate ID",
-                    "Source ID",
-                    "URL",
-                    "Status",
-                    "Rent Status",
-                    "Subtype",
-                    "Type",
-                    "Processed Content",
-                ]
-            )
+            header = [
+                "Domain", "Source Estate ID", "Source ID", "URL",
+                "Status", "Rent Status", "Subtype", "Type", "Processed Content",
+            ]
+            sheet.append(header)
         else:
             workbook = openpyxl.load_workbook(excel_file)
             sheet = workbook.active
 
-        sheet.append(
-            [
-                task.domain,
-                task.source_estate_id,
-                task.source_id,
-                task.url,
-                task.status,
-                task.rent_status,
-                task.subtype,
-                task.type,
-                processed_content,
-            ]
-        )
+        # Append the new row of data
+        sheet.append([
+            task.domain, task.source_estate_id, task.source_id, task.url,
+            task.status, task.rent_status, task.subtype, task.type,
+            processed_content,
+        ])
+
+        # Set text wrapping for the "Processed Content" cell in the newly added row
+        last_row_num = sheet.max_row
+        processed_content_cell = sheet.cell(row=last_row_num, column=9)  # Column 'I'
+        processed_content_cell.alignment = Alignment(wrap_text=True, vertical='top')
+
+        # Adjust column widths for readability
+        for i, column_cells in enumerate(sheet.columns, 1):
+            column_letter = get_column_letter(i)
+
+            if column_letter == 'I':  # Processed Content
+                sheet.column_dimensions[column_letter].width = 80
+            elif column_letter == 'D':  # URL
+                sheet.column_dimensions[column_letter].width = 60
+            else:
+                # Calculate max length for other columns
+                max_length = max(
+                    (len(str(cell.value)) for cell in column_cells if cell.value),
+                    default=0
+                )
+                # Set a slightly larger width, with a reasonable minimum for headers
+                adjusted_width = max(max_length + 2, 15)
+                sheet.column_dimensions[column_letter].width = adjusted_width
+
         workbook.save(excel_file)
         return True, f"Saved to {os.path.basename(excel_file)}"
     except (IOError, openpyxl.utils.exceptions.InvalidFileException) as e:
